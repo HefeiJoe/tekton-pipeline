@@ -13,10 +13,10 @@ def get_service(service_info):
     main_service_plan_name = service_info_list[1]
     main_service_chart_version = ''
     main_service_secret_name = ''
-    len = len(service_info_list)
-    if len == 3:
+    length = len(service_info_list)
+    if length == 3:
         main_service_secret_name = service_info_list[2]
-    if len == 4:
+    if length == 4:
         main_service_chart_version = service_info_list[3]
     return main_service_name,main_service_plan_name,main_service_chart_version,main_service_secret_name
 
@@ -94,11 +94,11 @@ def get_app_info(sso_token,getdeploymenturl):
 	return response.json()
 
 def get_external_domain(route_url, internal_domain):
-    url = "/routers/domain/{}/external".format(internal_domain)
+    url = "/domain/{}/external".format(internal_domain)
     url = route_url + url
     print(url)
     response = requests.get(url)
-    res=json.loads(response[1])['data']
+    res = response.json()['data']
     return res
 
 def write_file(file_path, content):
@@ -161,7 +161,7 @@ if __name__ == '__main__':
     else:
         sso_token = 'Bearer '+ sso_token
     getdeploymenturl = '%s/deployment/%s/plan/%s?chartVersion=%s' % (listingsystem_url,main_service_name,
-                                main_service_plan_name,main_service_secret_name,main_service_chart_version)
+                                main_service_plan_name,main_service_chart_version)
     apps = parseConfig(sso_token, getdeploymenturl)
     # get hosts
     hosts = ".%s.%s" % (namespace, internal_domain)
@@ -169,7 +169,7 @@ if __name__ == '__main__':
     chart_version = apps['param']['version']
     if external_domain == '#':
         external_domain = get_external_domain(route_url, internal_domain)
-    service_name = main_service_name.toLowerCase()
+    service_name = main_service_name.lower()
     release_name = '%s-%s' % (service_name, namespace)
     appdepencysevice_info_list = []
     if appdepency_sevice != '#':
@@ -198,4 +198,4 @@ if __name__ == '__main__':
     return_map.setdefault('service_url', service_url)
     return_map.setdefault('ensaas_datacentercode', ensaas_datacentercode)
     return_map.setdefault('ensaas_internal_url', ensaas_internal_url)
-    write_file('./params.json', return_map)
+    write_file('./params.json', json.dumps(return_map))
