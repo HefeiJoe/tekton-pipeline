@@ -1,0 +1,92 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Pipeline
+metadata:
+  name: pipeline-Dashboard-release
+spec:
+  inputs:
+    resources:
+      - name: resource-git-tekton-pipeline
+        type: git
+  params:
+    - name: serviceInfo
+      type: string
+    - name: datacenterCode
+      type: string
+    - name: cluster
+      type: string
+    - name: workspaceId
+      type: string
+    - name: namespace
+      type: string
+    - name: internalDomain
+      type: string
+    - name: externalDomain
+      type: string
+    - name: repo
+      type: string
+    - name: ssoUsername
+      type: string
+      default: #
+    - name: ssoPassword
+      type: string
+      default: #
+    - name: ssoToken
+      type: string
+      default: #
+    - name: harborUsername
+      type: string
+    - name: harborPassword
+      type: string
+    - name: imageUsername
+      type: string
+    - name: imagePassword
+      type: string
+    - name: listingsystemInternalUrl
+      type: string
+    - name: listingsystemUrl
+      type: string
+    - name: appDepencySevice
+      type: string
+      default: #
+
+  tasks:
+    - name: task-getparmas
+      taskRef:
+        name: task-getparmas
+      params:
+        - name: serviceInfo
+          value: $(params.serviceInfo)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+        - name: cluster
+          value: $(params.cluster)
+        - name: workspaceId
+          value: $(params.workspaceId)
+        - name: namespace
+          value: $(params.namespace)
+        - name: internalDomain
+          value: $(params.internalDomain)
+        - name: externalDomain
+          value: $(params.externalDomain)
+        - name: repo
+          value: $(params.repo)
+        - name: ssoUsername
+          value: $(params.ssoUsername)
+        - name: ssoPassword
+          value: $(params.ssoPassword)
+        - name: ssoToken
+          value: $(params.ssoToken)
+        - name: harborUsername
+          value: $(params.harborUsername)
+        - name: harborPassword
+          value: $(params.harborPassword)
+        - name: imageUsername
+          value: $(params.imageUsername)
+        - name: imagePassword
+          value: $(params.imagePassword)
+        - name: listingsystemInternalUrl
+          value: $(params.listingsystemInternalUrl)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: appDepencySevice
+          value: $(params.appDepencySevice)

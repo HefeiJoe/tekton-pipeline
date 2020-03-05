@@ -1,0 +1,27 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: task-getparmas
+spec:
+  inputs:
+    resources:
+      - name: source-fed-to-task
+        type: git
+  steps:
+    - name: run-task-getparmas
+      image: python:2.7.17-buster
+      volumeMounts:
+        - name: data-volume
+          mountPath: /var/getparams/
+      workingDir: "$(inputs.resources.source-fed-to-task.path)/"
+      command:
+        - /bin/bash
+      args:
+        - -c
+        - |
+          ls -R /var/getparams/
+          python getparams.py
+  volumes:
+    - name: data-volume
+      hostPath:
+        path: /var/getparams/
