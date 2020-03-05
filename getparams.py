@@ -102,7 +102,7 @@ def get_external_domain(route_url, internal_domain):
     return res
 
 def write_file(file_path, content):
-    f = open(file_path, 'a')
+    f = open(file_path, '')
     f.write(content)
     f.close()
 
@@ -198,4 +198,5 @@ if __name__ == '__main__':
     return_map.setdefault('service_url', service_url)
     return_map.setdefault('ensaas_datacentercode', ensaas_datacentercode)
     return_map.setdefault('ensaas_internal_url', ensaas_internal_url)
+    return_map.setdefault('ensaas_url', ensaas_url)
     write_file('./params.json', json.dumps(return_map))
