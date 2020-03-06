@@ -60,30 +60,18 @@ spec:
           value: $(params.datacenterCode)
         - name: cluster
           value: $(params.cluster)
-        - name: workspaceId
-          value: $(params.workspaceId)
         - name: namespace
           value: $(params.namespace)
         - name: internalDomain
           value: $(params.internalDomain)
         - name: externalDomain
           value: $(params.externalDomain)
-        - name: repo
-          value: $(params.repo)
         - name: ssoUsername
           value: $(params.ssoUsername)
         - name: ssoPassword
           value: $(params.ssoPassword)
         - name: ssoToken
           value: $(params.ssoToken)
-        - name: harborUsername
-          value: $(params.harborUsername)
-        - name: harborPassword
-          value: $(params.harborPassword)
-        - name: imageUsername
-          value: $(params.imageUsername)
-        - name: imagePassword
-          value: $(params.imagePassword)
         - name: listingsystemInternalUrl
           value: $(params.listingsystemInternalUrl)
         - name: listingsystemUrl
