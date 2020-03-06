@@ -6,6 +6,6 @@ spec:
   type: git
   params:
    - name: url
-     value: https://github.com/HefeiJoe/tekton-pipeline
+     value: https://github.com/HefeiJoe/tekton-pipeline.git
    - name: revison
      value: master
