@@ -101,8 +101,30 @@ def get_external_domain(route_url, internal_domain):
     res = response.json()['data']
     return res
 
+def CallRestfulAPI(url, data, method, auth, timeout, content_type="application/json"):
+    headers = {"Authorization": auth, "Content-Type": content_type, "Accept": content_type, "Cache-Control": "no-cache"}
+    if method == "GET":
+        response = requests.get(url, headers=headers, timeout=timeout, verify=False)
+    if method == "POST":
+        response = requests.post(url, data=data, headers=headers, timeout=timeout, verify=False)
+    if method == "PUT":
+        response = requests.put(url, data=data, headers=headers, timeout=timeout, verify=False)
+    if method == "DELETE":
+        response = requests.delete(url, headers=headers, timeout=timeout, verify=False)
+    return response.status_code, response.text, response.elapsed.microseconds / 1000
+
+def get_kubeconfig(mp_url, token, datacentercode,cluster):
+    datacenterCode = datacentercode
+    Cluster = cluster
+    url = "/datacenter/{}/cluster/{}/config?type=string".format(datacenterCode,Cluster)
+    url = mp_url + url
+    method = "GET"
+    response = CallRestfulAPI(url,"",method,token, 60)
+    res = response[1]
+    return res
+
 def write_file(file_path, content):
-    f = open(file_path, '')
+    f = open(file_path, 'w')
     f.write(content)
     f.close()
 
@@ -133,18 +155,18 @@ def get_urls(listingsystem_url,datacenter_code):
 if __name__ == '__main__':
     service_info = sys.argv[1]
     datacenter_code = sys.argv[2]
-    namespace = sys.argv[3]
-    internal_domain = sys.argv[4]
-    external_domain = sys.argv[5]
-    sso_username = sys.argv[6]
-    sso_password = sys.argv[7]
-    sso_token = sys.argv[8]
-    image_username = sys.argv[9]
-    image_password = sys.argv[10]
-    listingsystem_internal_url = sys.argv[11]
-    listingsystem_url = sys.argv[12]
-    appdepency_sevice = sys.argv[13]
-    # cluster = sys.argv[3]
+    cluster = sys.argv[3]
+    namespace = sys.argv[4]
+    internal_domain = sys.argv[5]
+    external_domain = sys.argv[6]
+    sso_username = sys.argv[7]
+    sso_password = sys.argv[8]
+    sso_token = sys.argv[9]
+    image_username = sys.argv[10]
+    image_password = sys.argv[11]
+    listingsystem_internal_url = sys.argv[12]
+    listingsystem_url = sys.argv[13]
+    appdepency_sevice = sys.argv[14]
     # workspace_id = sys.argv[4]
     # repo = sys.argv[8]
     # harbor_username = sys.argv[12]
@@ -199,4 +221,7 @@ if __name__ == '__main__':
     return_map.setdefault('ensaas_datacentercode', ensaas_datacentercode)
     return_map.setdefault('ensaas_internal_url', ensaas_internal_url)
     return_map.setdefault('ensaas_url', ensaas_url)
+    kubeconfig = get_kubeconfig(mp_url, sso_token, datacenter_code,cluster)
     write_file('./params.json', json.dumps(return_map))
+    write_file('./values.yaml', apps['values'].replace('\"','"'))
+    write_file('./kubeconfig', kubeconfig)
