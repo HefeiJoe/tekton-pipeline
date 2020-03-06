@@ -4,7 +4,7 @@ import requests
 import logging
 
 def validation(ssoUsername,sso_password,sso_token):
-    if sso_token == '#' and (ssoUsername == '#' or sso_password == '#'):
+    if sso_token == '0' and (ssoUsername == '0' or sso_password == '0'):
         logging.error('Permission check failed!')
 
 def get_service(service_info):
@@ -178,23 +178,25 @@ if __name__ == '__main__':
     sso_internal_url, ssourl, mg_internal_url, mg_url, dccs_internal_url, dccs_url, license_internal_url, \
     license_url, service_internal_url, service_url, ensaas_datacentercode, ensaas_internal_url, ensaas_url, \
     mp_url, route_url = get_urls(listingsystem_url,datacenter_code)
-    if sso_token == '#':
+    if sso_token == '0':
         sso_token = login(ssourl, sso_username, sso_password)
     else:
         sso_token = 'Bearer '+ sso_token
     getdeploymenturl = '%s/deployment/%s/plan/%s?chartVersion=%s' % (listingsystem_url,main_service_name,
                                 main_service_plan_name,main_service_chart_version)
+    logging.info('getdeploymenturl: '+getdeploymenturl)
+    print getdeploymenturl
     apps = parseConfig(sso_token, getdeploymenturl)
     # get hosts
     hosts = ".%s.%s" % (namespace, internal_domain)
     chart_name = apps['param']['chartname']
     chart_version = apps['param']['version']
-    if external_domain == '#':
+    if external_domain == '0':
         external_domain = get_external_domain(route_url, internal_domain)
     service_name = main_service_name.lower()
     release_name = '%s-%s' % (service_name, namespace)
     appdepencysevice_info_list = []
-    if appdepency_sevice != '#':
+    if appdepency_sevice != '0':
         appdepency_sevice_info_list = appdepency_sevice.split(',')
     app_service_name_list = []
     for app_service_info in appdepency_sevice_info_list:
