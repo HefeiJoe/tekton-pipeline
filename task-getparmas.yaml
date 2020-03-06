@@ -48,8 +48,8 @@ spec:
       args:
         - -c
         - |
-          python getparams.py $(params.serviceInfo) $(params.datacenterCode) $(params.cluster) $(params.namespace) $(params.internalDomain) $(params.externalDomain) $(params.ssoUsername) $(params.ssoPassword) $(params.ssoToken) $(params.listingsystemInternalUrl) $(params.listingsystemUrl) $(params.appDepencySevice)
           ls -R /tekton/home/getparams 
+          python getparams.py $(params.serviceInfo) $(params.datacenterCode) $(params.cluster) $(params.namespace) $(params.internalDomain) $(params.externalDomain) $(params.ssoUsername) $(params.ssoPassword) $(params.ssoToken) $(params.listingsystemInternalUrl) $(params.listingsystemUrl) $(params.appDepencySevice)
   volumes:
     - name: data-volume
       hostPath:
