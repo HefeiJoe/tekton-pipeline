@@ -25,13 +25,13 @@ spec:
       type: string
     - name: ssoUsername
       type: string
-      default: #
+      default: '#'
     - name: ssoPassword
       type: string
-      default: #
+      default: '#'
     - name: ssoToken
       type: string
-      default: #
+      default: '#'
     - name: harborUsername
       type: string
     - name: harborPassword
@@ -46,12 +46,16 @@ spec:
       type: string
     - name: appDepencySevice
       type: string
-      default: #
+      default: '#'
 
   tasks:
     - name: task-getparmas
       taskRef:
         name: task-getparmas
+      resources:
+        inputs:
+          - name: resource-git-tekton-pipeline
+            resource: resource-git-tekton-pipeline
       params:
         - name: serviceInfo
           value: $(params.serviceInfo)
