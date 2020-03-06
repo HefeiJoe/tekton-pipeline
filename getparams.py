@@ -195,7 +195,7 @@ if __name__ == '__main__':
         external_domain = get_external_domain(route_url, internal_domain)
     service_name = main_service_name.lower()
     release_name = '%s-%s' % (service_name, namespace)
-    appdepencysevice_info_list = []
+    appdepency_sevice_info_list = []
     if appdepency_sevice != '0':
         appdepency_sevice_info_list = appdepency_sevice.split(',')
     app_service_name_list = []
