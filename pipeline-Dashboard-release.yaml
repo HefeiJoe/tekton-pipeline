@@ -7,47 +7,47 @@ spec:
     resources:
       - name: resource-git-tekton-pipeline
         type: git
-  params:
-    - name: serviceInfo
-      type: string
-    - name: datacenterCode
-      type: string
-    - name: cluster
-      type: string
-    - name: workspaceId
-      type: string
-    - name: namespace
-      type: string
-    - name: internalDomain
-      type: string
-    - name: externalDomain
-      type: string
-    - name: repo
-      type: string
-    - name: ssoUsername
-      type: string
-      default: #
-    - name: ssoPassword
-      type: string
-      default: #
-    - name: ssoToken
-      type: string
-      default: #
-    - name: harborUsername
-      type: string
-    - name: harborPassword
-      type: string
-    - name: imageUsername
-      type: string
-    - name: imagePassword
-      type: string
-    - name: listingsystemInternalUrl
-      type: string
-    - name: listingsystemUrl
-      type: string
-    - name: appDepencySevice
-      type: string
-      default: #
+    params:
+      - name: serviceInfo
+        type: string
+      - name: datacenterCode
+        type: string
+      - name: cluster
+        type: string
+      - name: workspaceId
+        type: string
+      - name: namespace
+        type: string
+      - name: internalDomain
+        type: string
+      - name: externalDomain
+        type: string
+      - name: repo
+        type: string
+      - name: ssoUsername
+        type: string
+        default: #
+      - name: ssoPassword
+        type: string
+        default: #
+      - name: ssoToken
+        type: string
+        default: #
+      - name: harborUsername
+        type: string
+      - name: harborPassword
+        type: string
+      - name: imageUsername
+        type: string
+      - name: imagePassword
+        type: string
+      - name: listingsystemInternalUrl
+        type: string
+      - name: listingsystemUrl
+        type: string
+      - name: appDepencySevice
+        type: string
+        default: #
 
   tasks:
     - name: task-getparmas
