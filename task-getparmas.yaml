@@ -5,7 +5,7 @@ metadata:
 spec:
   inputs:
     resources:
-      - name: source-fed-to-task
+      - name: resource-git-tekton-pipeline
         type: git
     params:
       - name: serviceInfo
@@ -42,7 +42,7 @@ spec:
       volumeMounts:
         - name: data-volume
           mountPath: /tekton/home/getparams
-      workingDir: "$(inputs.resources.source-fed-to-task.path)/"
+      workingDir: "$(inputs.resources.resource-git-tekton-pipeline.path)/"
       command:
         - /bin/bash
       args:

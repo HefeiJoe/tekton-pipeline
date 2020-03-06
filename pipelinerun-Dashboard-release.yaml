@@ -6,7 +6,7 @@ spec:
   pipelineRef:
     name: pipeline-dashboard-release
   resources:
-    - name: source-fed-to-task
+    - name: resource-git-tekton-pipeline
       resourceRef:
         name: resource-git-tekton-pipeline
   params: 
