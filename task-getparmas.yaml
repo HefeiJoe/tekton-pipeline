@@ -22,20 +22,20 @@ spec:
         type: string
       - name: ssoUsername
         type: string
-        default: '#'
+        default: '0'
       - name: ssoPassword
         type: string
-        default: '#'
+        default: '0'
       - name: ssoToken
         type: string
-        default: '#'
+        default: '0'
       - name: listingsystemInternalUrl
         type: string
       - name: listingsystemUrl
         type: string
       - name: appDepencySevice
         type: string
-        default: '#'
+        default: '0'
   steps:
     - name: run-task-getparmas
       image: python:2.7.17-buster

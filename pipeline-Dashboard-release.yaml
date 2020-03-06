@@ -25,13 +25,13 @@ spec:
       type: string
     - name: ssoUsername
       type: string
-      default: '#'
+      default: '0'
     - name: ssoPassword
       type: string
-      default: '#'
+      default: '0'
     - name: ssoToken
       type: string
-      default: '#'
+      default: '0'
     - name: harborUsername
       type: string
     - name: harborPassword
@@ -46,7 +46,7 @@ spec:
       type: string
     - name: appDepencySevice
       type: string
-      default: '#'
+      default: '0'
 
   tasks:
     - name: task-getparmas
