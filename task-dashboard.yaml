@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1alpha1
+kind: Task
+metadata:
+  name: task-dashboard
+spec:
+  inputs:
+    resources:
+      - name: resource-git-tekton-pipeline
+        type: git
+    params:
+      - name: serviceInfo
+        type: string
+      - name: datacenterCode
+        type: string
+      - name: cluster
+        type: string
+      - name: namespace
+        type: string
+      - name: internalDomain
+        type: string
+      - name: externalDomain
+        type: string
+      - name: repo
+        type: string
+      - name: ssoUsername
+        type: string
+        default: '0'
+      - name: ssoPassword
+        type: string
+        default: '0'
+      - name: ssoToken
+        type: string
+        default: '0'
+      - name: harborUsername
+        type: string
+      - name: harborPassword
+        type: string
+      - name: listingsystemInternalUrl
+        type: string
+      - name: listingsystemUrl
+        type: string
+      - name: appDepencySevice
+        type: string
+        default: '0'
+  steps:
+    - name: run-steps-getparmas
+      image: python:2.7.17-buster
+      workingDir: "$(inputs.resources.resource-git-tekton-pipeline.path)/"
+      command:
+        - /bin/bash
+      args:
+        - -c
+        - |
+          pip install requests --index https://pypi.tuna.tsinghua.edu.cn/simple
+          python getparams.py $(inputs.params.serviceInfo) $(inputs.params.datacenterCode) $(inputs.params.cluster) $(inputs.params.namespace) $(inputs.params.internalDomain) $(inputs.params.externalDomain) $(inputs.params.ssoUsername) $(inputs.params.ssoPassword) $(inputs.params.ssoToken) $(inputs.params.listingsystemInternalUrl) $(inputs.params.listingsystemUrl) $(inputs.params.appDepencySevice)
+          pwd
+          ls
+    - name: run-steps-install-helm
+      image: lachlanevenson/k8s-helm:v3.1.1
+      script: |
+        apk add jq
+        cd /workspace/resource-git-tekton-pipeline
+        chartname=`cat params.json | jq -r .chart_name`
+        chartversion=`cat params.json | jq -r .chart_version`
+        releasename=`cat params.json | jq -r .release_name`
+        mainservicesecretname=`cat params.json | jq -r .main_service_secret_name`
+        hosts=`cat params.json | jq -r .hosts`
+        ssoInternalUrl=`cat params.json | jq -r .sso_internal_url`
+        ssourl=`cat params.json | jq -r .sso_url`
+        mgInternalUrl=`cat params.json | jq -r .mg_internal_url`
+        mgurl=`cat params.json | jq -r .mg_url`
+        dccsInternalUrl=`cat params.json | jq -r .dccs_internal_url`
+        dccsurl=`cat params.json | jq -r .dccs_url`
+        licenseInternalUrl=`cat params.json | jq -r .license_internal_url`
+        licenseurl=`cat params.json | jq -r .license_url`
+        listingsystemInternalUrl=`cat params.json | jq -r .listingsystem_internal_url`
+        listingsystemUrl=`cat params.json | jq -r .listingsystem_url`
+        serviceInternalUrl=`cat params.json | jq -r .service_internal_url`
+        serviceurl=`cat params.json | jq -r .service_url`
+        ensaasDatacenterCode=`cat params.json | jq -r .ensaas_datacentercode`
+        ensaasInternalUrl=`cat params.json | jq -r .ensaas_internal_url`
+        ensaasurl=`cat params.json | jq -r .ensaas_url`
+        helm repo add --kubeconfig kubeconfig --username $(inputs.params.harborUsername) --password $(inputs.params.harborPassword) ${chartname} $(inputs.params.repo)
+        helm repo update --kubeconfig kubeconfig
+        helm upgrade --install ${releasename} --kubeconfig kubeconfig ${chartname}/${chartname} --version ${chartversion}  --namespace $(inputs.params.namespace) -f ./values.yaml --set database.secretName=${mainservicesecretname},url.host=${hosts},ensaasApps.api-sso.internalUrl=${ssoInternalUrl},ensaasApps.api-sso.externalUrl=${ssourl},ensaasApps.api-mg.internalUrl=${mgInternalUrl},ensaasApps.api-mg.externalUrl=${mgurl},ensaasApps.api-dccs.internalUrl=${dccsInternalUrl},ensaasApps.api-dccs.externalUrl=${dccsurl},ensaasApps.api-license.internalUrl=${licenseInternalUrl},ensaasApps.api-license.externalUrl=${licenseurl},ensaasApps.api-listingsystem.internalUrl=${listingsystemInternalUrl},ensaasApps.api-listingsystem.externalUrl=${listingsystemUrl},ensaasApps.api-service.internalUrl=${serviceInternalUrl},ensaasApps.api-service.externalUrl=${serviceurl},ensaasApps.ensaas.datacenterCode=${ensaasDatacenterCode},ensaasApps.ensaas.internalUrl=${ensaasInternalUrl},ensaasApps.ensaas.externalUrl=${ensaasurl}
+        helm ls -n $(inputs.params.namespace) --kubeconfig kubeconfig
