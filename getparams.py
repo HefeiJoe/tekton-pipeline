@@ -84,7 +84,6 @@ def parseConfig(sso_token,getdeploymenturl):
     for i in range(len(appServicesDependency) - 1):
         app_services[i] = appServicesDependency[i]['serviceName'] + '-' + appServicesDependency[i]['chartVersion']
     map['appServicesDependency'] = app_services
-    write_file("./values.yaml",data['values'].replace('\"', '"'))
     return map
 
 def get_app_info(sso_token,getdeploymenturl):
