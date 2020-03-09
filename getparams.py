@@ -164,6 +164,7 @@ if __name__ == '__main__':
     listingsystem_internal_url = sys.argv[10]
     listingsystem_url = sys.argv[11]
     appdepency_sevice = sys.argv[12]
+    file_path = sys.argv[13]
     # workspace_id = sys.argv[4]
     # repo = sys.argv[8]
     # image_username = sys.argv[10]
@@ -223,6 +224,6 @@ if __name__ == '__main__':
     return_map.setdefault('ensaas_internal_url', ensaas_internal_url)
     return_map.setdefault('ensaas_url', ensaas_url)
     kubeconfig = get_kubeconfig(mp_url, sso_token, datacenter_code,cluster)
-    write_file('/tekton/home/getparams/params.json', json.dumps(return_map, indent=2))
-    write_file('/tekton/home/getparams/values.yaml', apps['values'].replace('\"','"'))
-    write_file('/tekton/home/getparams/kubeconfig', kubeconfig)
+    write_file(file_path+'/params.json', json.dumps(return_map, indent=2))
+    write_file(file_path+'/values.yaml', apps['values'].replace('\"','"'))
+    write_file(file_path+'/kubeconfig', kubeconfig)
