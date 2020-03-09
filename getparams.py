@@ -222,6 +222,7 @@ if __name__ == '__main__':
     return_map.setdefault('ensaas_datacentercode', ensaas_datacentercode)
     return_map.setdefault('ensaas_internal_url', ensaas_internal_url)
     return_map.setdefault('ensaas_url', ensaas_url)
+    return_map.setdefault('release_name', release_name)
     kubeconfig = get_kubeconfig(mp_url, sso_token, datacenter_code,cluster)
     write_file('./params.json', json.dumps(return_map, indent=2))
     write_file('./values.yaml', apps['values'].replace('\"','"'))
