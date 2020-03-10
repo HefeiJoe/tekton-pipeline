@@ -1,7 +1,7 @@
 import base64, json, sys
 def parseConfig(secretinfofile,postgresinfofile):
     map = {}
-    with open(secretinfofile,'r',encoding='UTF-8') as f:
+    with open(secretinfofile,'r') as f:
         secretinfo = json.load(f)
         data = secretinfo['data']['ENSAAS_SERVICES']
         dbinfo = base64.b64decode(data).decode("ascii")
@@ -13,7 +13,7 @@ def parseConfig(secretinfofile,postgresinfofile):
         map['port'] = postgresqlinfo['credentials']['port']
         map['uri'] = postgresqlinfo['credentials']['uri']
         map['username'] = postgresqlinfo['credentials']['username']
-    with open(postgresinfofile,'r',encoding='UTF-8') as f:
+    with open(postgresinfofile,'r') as f:
         postgresinfo = json.load(f)
         postgresinfo['database'] = map['database']
         postgresinfo['user'] = map['username']
