@@ -18,7 +18,7 @@ def parseConfig(secretinfofile,postgresinfofile):
         postgresinfo['database'] = map['database']
         postgresinfo['user'] = map['username']
         postgresinfo['password'] = map['password']
-        postgresinfo.secureJsonData['password'] = map['password']
+        postgresinfo['secureJsonData]['password'] = map['password']
         postgresinfo['url'] = map['host']
         print postgresinfo
         f = open(postgresinfofile, 'w')
