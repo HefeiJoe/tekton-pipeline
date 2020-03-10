@@ -114,6 +114,3 @@ spec:
           python importdashboard.py -a ${dashboard_url} -t datasource -d ./datasource
           python importdashboard.py -a ${dashboard_url} -t dashboard -d ./dashboard
           python importdashboard.py -a ${dashboard_url} -t srpframe -e ${srpframeReplace}***${OeeEnReplace}***${OeeCnReplace}***${OeeTwReplace} -d ./srpframe
-          
-          
-
