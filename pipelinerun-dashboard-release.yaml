@@ -3,12 +3,16 @@ kind: PipelineRun
 metadata:
   name: pipelinerun-dashboard-release
 spec:
+  serviceAccountName: gitlab-sa
   pipelineRef:
     name: pipeline-dashboard-release
   resources:
     - name: resource-git-tekton-pipeline
       resourceRef:
         name: resource-git-tekton-pipeline
+    - name: resource-git-oee-tekton-pipeline
+      resourceRef:
+        name: resource-git-oee-tekton-pipeline
   params: 
     - name: serviceInfo
       value: Dashboard:Advanced-Edition:dashboard-sundi-secret 

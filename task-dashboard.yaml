@@ -7,6 +7,8 @@ spec:
     resources:
       - name: resource-git-tekton-pipeline
         type: git
+      - name: resource-git-oee-tekton-pipeline
+        type: git
     params:
       - name: serviceInfo
         type: string
@@ -43,7 +45,7 @@ spec:
         type: string
         default: '0'
   steps:
-    - name: run-steps-getparmas
+    - name: run-getparmas
       image: python:2.7.17-buster
       workingDir: "$(inputs.resources.resource-git-tekton-pipeline.path)/"
       command:
@@ -55,7 +57,7 @@ spec:
           python getparams.py $(inputs.params.serviceInfo) $(inputs.params.datacenterCode) $(inputs.params.cluster) $(inputs.params.namespace) $(inputs.params.internalDomain) $(inputs.params.externalDomain) $(inputs.params.ssoUsername) $(inputs.params.ssoPassword) $(inputs.params.ssoToken) $(inputs.params.listingsystemInternalUrl) $(inputs.params.listingsystemUrl) $(inputs.params.appDepencySevice)
           pwd
           ls
-    - name: run-steps-install-helm
+    - name: run-install-helm
       image: lachlanevenson/k8s-helm:v3.1.1
       script: |
         apk add jq
@@ -84,3 +86,34 @@ spec:
         helm repo update --kubeconfig kubeconfig
         helm upgrade --install ${releasename} --kubeconfig kubeconfig ${chartname}/${chartname} --version ${chartversion}  --namespace $(inputs.params.namespace) -f ./values.yaml --set database.secretName=${mainservicesecretname},url.host=${hosts},ensaasApps.api-sso.internalUrl=${ssoInternalUrl},ensaasApps.api-sso.externalUrl=${ssourl},ensaasApps.api-mg.internalUrl=${mgInternalUrl},ensaasApps.api-mg.externalUrl=${mgurl},ensaasApps.api-dccs.internalUrl=${dccsInternalUrl},ensaasApps.api-dccs.externalUrl=${dccsurl},ensaasApps.api-license.internalUrl=${licenseInternalUrl},ensaasApps.api-license.externalUrl=${licenseurl},ensaasApps.api-listingsystem.internalUrl=${listingsystemInternalUrl},ensaasApps.api-listingsystem.externalUrl=${listingsystemUrl},ensaasApps.api-service.internalUrl=${serviceInternalUrl},ensaasApps.api-service.externalUrl=${serviceurl},ensaasApps.ensaas.datacenterCode=${ensaasDatacenterCode},ensaasApps.ensaas.internalUrl=${ensaasInternalUrl},ensaasApps.ensaas.externalUrl=${ensaasurl}
         helm ls -n $(inputs.params.namespace) --kubeconfig kubeconfig
+    - name: run-get-postgresqlsecretinfo
+      image: lachlanevenson/k8s-kubectl
+      workingDir: "$(inputs.resources.resource-git-tekton-pipeline.path)/"
+      script: |
+        apk add jq
+        mainservicesecretname=`cat params.json | jq -r .main_service_secret_name`
+        kubectl --kubeconfig kubeconfig get secret ${mainservicesecretname} -n $(inputs.params.namespace) -o json > secretinfo.json
+        cat secretinfo.json
+    - name: run-import-dashboard
+      image: python:2.7.17-buster
+      workingDir: "$(inputs.resources.resource-git-tekton-pipeline.path)/"
+      command:
+        - /bin/bash
+      args:
+        - -c
+        - |
+          python getpostgresqlsecretinfo.py secretinfo.json $(inputs.resources.resource-git-oee-tekton-pipeline.path)/datasource/postgres.json
+          ls   
+          cat $(inputs.resources.resource-git-oee-tekton-pipeline.path)/datasource/postgres.json
+          cd $(inputs.resources.resource-git-oee-tekton-pipeline.path)
+          srpframeReplace=https://dashboard-ifactory-adviiot-ifactory-ifactory.wise-paas.com,https://dashboard-$(inputs.params.namespace)-$(inputs.params.externalDomain)
+          OeeEnReplace=https://api-srpalert.wise-paas.com/oeeen,https://api-srpAlert-$(inputs.params.namespace)-$(inputs.params.externalDomain)/oeeen
+          OeeCnReplace=https://api-srpalert.wise-paas.com/oeecn,https://api-srpAlert-$(inputs.params.namespace)-$(inputs.params.externalDomain)/oeecn
+          OeeTwReplace=https://api-srpalert.wise-paas.com/oeetw,https://api-srpAlert-$(inputs.params.namespace)-$(inputs.params.externalDomain)/oeetw
+          dashboard_url=https://dashboard-$(inputs.params.namespace)-$(inputs.params.externalDomain)
+          python importdashboard.py -a ${dashboard_url} -t datasource -d ./datasource
+          python importdashboard.py -a ${dashboard_url} -t dashboard -d ./dashboard
+          python importdashboard.py -a ${dashboard_url} -t srpframe -e ${srpframeReplace}***${OeeEnReplace}***${OeeCnReplace}***${OeeTwReplace} -d ./srpframe
+          
+          
+

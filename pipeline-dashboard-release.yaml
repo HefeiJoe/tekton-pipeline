@@ -6,6 +6,8 @@ spec:
   resources:
     - name: resource-git-tekton-pipeline
       type: git
+    - name: resource-git-oee-tekton-pipeline
+      type: git
   params:
     - name: serviceInfo
       type: string
@@ -56,6 +58,8 @@ spec:
         inputs:
           - name: resource-git-tekton-pipeline
             resource: resource-git-tekton-pipeline
+          - name: resource-git-oee-tekton-pipeline
+            resource: resource-git-oee-tekton-pipeline
       params:
         - name: serviceInfo
           value: $(params.serviceInfo)

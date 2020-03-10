@@ -9,3 +9,38 @@ spec:
      value: https://github.com/HefeiJoe/tekton-pipeline.git
    - name: revison
      value: master
+     
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-user-pass
+  annotations:
+    tekton.dev/git-0: http://advgitlab.eastasia.cloudapp.azure.com/ # Described below
+type: kubernetes.io/basic-auth
+stringData:
+  username: he.fei
+  password: hF15991964302fly
+  
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-sa
+secrets:
+  - name: basic-user-pass
+  
+---
+   
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: resource-git-oee-tekton-pipeline
+spec:
+  type: git
+  params:
+   - name: url
+     value: http://advgitlab.eastasia.cloudapp.azure.com/WISE-PaaS_SRP_Pipeline/OEE.git
+   - name: revison
+     value: master
