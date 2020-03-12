@@ -133,7 +133,7 @@ def get_urls(listingsystem_url,datacenter_code):
     datacenterUrls = response.json()
     urls = datacenterUrls["data"][0]["datacenterUrl"]
     sso_internal_url = urls['api-sso']['internalUrl']
-    ssourl = urls['api-sso']['externalUrl']
+    sso_url = urls['api-sso']['externalUrl']
     mg_internal_url = urls['api-mg']['internalUrl']
     mg_url = urls['api-mg']['externalUrl']
     dccs_internal_url = urls['api-dccs']['internalUrl']
@@ -147,7 +147,7 @@ def get_urls(listingsystem_url,datacenter_code):
     ensaas_url = urls['ensaas']['externalUrl']
     mp_url = urls['api-mp']['externalUrl']
     route_url = urls['api-router']['externalUrl']
-    return sso_internal_url,ssourl,mg_internal_url,mg_url,dccs_internal_url,dccs_url,license_internal_url,\
+    return sso_internal_url,sso_url,mg_internal_url,mg_url,dccs_internal_url,dccs_url,license_internal_url,\
            license_url,service_internal_url,service_url,ensaas_datacentercode,ensaas_internal_url,ensaas_url,\
            mp_url,route_url
 
@@ -174,11 +174,11 @@ if __name__ == '__main__':
     main_service_name, main_service_plan_name, main_service_chart_version, main_service_secret_name =\
         get_service(service_info)
     #get urls
-    sso_internal_url, ssourl, mg_internal_url, mg_url, dccs_internal_url, dccs_url, license_internal_url, \
+    sso_internal_url, sso_url, mg_internal_url, mg_url, dccs_internal_url, dccs_url, license_internal_url, \
     license_url, service_internal_url, service_url, ensaas_datacentercode, ensaas_internal_url, ensaas_url, \
     mp_url, route_url = get_urls(listingsystem_url,datacenter_code)
     if sso_token == '0':
-        sso_token = login(ssourl, sso_username, sso_password)
+        sso_token = login(sso_url, sso_username, sso_password)
     else:
         sso_token = 'Bearer '+ sso_token
     getdeploymenturl = '%s/deployment/%s/plan/%s?chartVersion=%s' % (listingsystem_url,main_service_name,
@@ -208,7 +208,7 @@ if __name__ == '__main__':
     return_map.setdefault('main_service_secret_name', main_service_secret_name)
     return_map.setdefault('hosts',hosts)
     return_map.setdefault('sso_internal_url', sso_internal_url)
-    return_map.setdefault('ssourl', ssourl)
+    return_map.setdefault('sso_url', sso_url)
     return_map.setdefault('mg_internal_url', mg_internal_url)
     return_map.setdefault('mg_url', mg_url)
     return_map.setdefault('dccs_internal_url', dccs_internal_url)
