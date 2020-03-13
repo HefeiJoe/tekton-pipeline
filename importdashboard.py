@@ -24,10 +24,10 @@ def CreateDataSource(grafana_url, token, datasource):
         data = json.dumps(datasource)
         method = "POST"
         response = CallRestfulAPI(url, data, method, token, 60)
-        print response
+        print('response : ', response)
         return response
     except Exception as e:
-        print e
+        print(e)
 def ImportBoard(grafana_url, token, dashboard, folder_id, overwrite):
     try:
         url = "%s/api/dashboards/import" % grafana_url
@@ -51,7 +51,7 @@ def ImportBoard(grafana_url, token, dashboard, folder_id, overwrite):
             elif dashboard['__inputs'] == None:
                 boaydata['inputs'] = inputs
         except Exception as e:
-            print e
+            print(e)
         boaydata['folderId'] = folder_id
         if overwrite == 'true':
             boaydata['overwrite'] = True
@@ -60,17 +60,17 @@ def ImportBoard(grafana_url, token, dashboard, folder_id, overwrite):
         data = json.dumps(boaydata)
         method = "POST"
         response = CallRestfulAPI(url, data, method, token, 60)
-        print response
+        print('response : ', response)
         return response
     except Exception as e:
-        print e
+        print(e)
 def ImportSRPFrame(grafana_url, token, data):
     try:
         url = "%s/api/frame" % grafana_url
         method = "GET"
         response = CallRestfulAPI(url, '', method, token, 60)
         if response[0] != 200:
-            print "Get frame failed!"
+            print("Get frame failed!")
             return False
         frames = response[1]
         frame_list = json.loads(frames)
@@ -78,20 +78,20 @@ def ImportSRPFrame(grafana_url, token, data):
             for frame in frame_list:
                 if frame['orgId'] == data['orgId'] and frame['srpName'] == data['srpName'] and frame['language'] == \
                         data['language']:
-                    print "srpName:%s, orgId:%s, language:%s, exist!" % (
-                    data['srpName'], data['orgId'], data['language'])
+                    print("srpName:%s, orgId:%s, language:%s, exist!" % (
+                    data['srpName'], data['orgId'], data['language']))
                     return True
         data_str = json.dumps(data)
         url = "%s/api/frame/import" % grafana_url
         method = "POST"
         response = CallRestfulAPI(url, data_str, method, token, 60)
-        print response
+        print('response : ', response)
         if response[0] == 200:
             return True
         else:
             return False
     except Exception as e:
-        print e
+        print(e)
         return False
 def CreateFolder(grafana_url, token, foldername):
     try:
@@ -107,7 +107,7 @@ def CreateFolder(grafana_url, token, foldername):
                     folder_id = folder['id']
                     return folder_id
         else:
-            print "Get folder list failed!!!"
+            print("Get folder list failed!!!")
         # if the folder doesn't exist, create folder
         if folder_id == 0:
             method = "POST"
@@ -118,10 +118,10 @@ def CreateFolder(grafana_url, token, foldername):
                 folder_id = folder_info['id']
                 return folder_id
             else:
-                print "Create folder failed!!!"
+                print("Create folder failed!!!")
         return folder_id
     except Exception as e:
-        print e
+        print(e)
         return folder_id
 if __name__ == '__main__':
     srpframe_replace_count = 0
@@ -231,14 +231,14 @@ if __name__ == '__main__':
         options.dir = config_dir
     if options.file != None and options.file != '':
         if not os.path.exists(options.file):
-            print "%s doesn't exists!!!" % options.file
+            print("%s doesn't exists!!!" % options.file)
             sys.exit()
         filename = os.path.basename(options.file)
         with open(options.file, 'r') as f:
             try:
                 if (options.type != None) and (options.type == 'datasource'):
                     datasource = json.loads(f.read())
-                    print datasource
+                    print('datasource:', datasource)
                     if datasource_replace_count != 0:
                         for i in range(0, datasource_replace_count):
                             if config_datasource_replace_array[i][0] == filename:
@@ -257,10 +257,10 @@ if __name__ == '__main__':
                     srpframe_data_json = json.loads(srpframe_data)
                     ImportSRPFrame(grafana_url, auth, srpframe_data_json)
             except Exception as e:
-                print e
+                print(e)
     if options.dir != None and options.dir != '':
         if not os.path.exists(options.dir):
-            print "%s doesn't exists!!!" % options.dir
+            print("%s doesn't exists!!!" % options.dir)
             sys.exit()
         files = os.listdir(options.dir)
         for file in files:
@@ -279,12 +279,12 @@ if __name__ == '__main__':
                             dashboard = json.loads(f.read())
                             ImportBoard(grafana_url, auth, dashboard, 0, options.overwrite)
                     except Exception as e:
-                        print e
+                        print(e)
             elif os.path.isdir(filepath):
                 if (options.type != None) and (options.type == 'dashboard'):
                     folder_id = CreateFolder(grafana_url, auth, file)
                     if folder_id != 0:
-                        print "%s:%s" % (file, folder_id)
+                        print("%s:%s" % (file, folder_id))
                         for child_root, child_dirs, child_files in os.walk(filepath, followlinks=False):
                             for child_file in child_files:
                                 child_filepath = os.path.join(child_root, child_file)
@@ -309,4 +309,4 @@ if __name__ == '__main__':
                 else:
                     pass
             else:
-                print "%s is a special file" % file
+                print("%s is a special file" % file)
