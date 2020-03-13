@@ -20,7 +20,6 @@ def parseConfig(secretinfofile,postgresinfofile):
         postgresinfo['password'] = map['password']
         postgresinfo['secureJsonData']['password'] = map['password']
         postgresinfo['url'] = map['host']
-        print postgresinfo
         f = open(postgresinfofile, 'w')
         f.write(json.dumps(postgresinfo, indent=2))
         f.close()
