@@ -95,7 +95,7 @@ spec:
         kubectl --kubeconfig kubeconfig get secret ${mainservicesecretname} -n $(inputs.params.namespace) -o json > secretinfo.json
         cat secretinfo.json
     - name: run-import-dashboard
-      image: python:2.7.17-buster
+      image: python:3.7.7-buster
       workingDir: "$(inputs.resources.resource-git-tekton-pipeline.path)/"
       command:
         - /bin/bash
