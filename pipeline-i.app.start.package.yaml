@@ -1,0 +1,1783 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-propublic
+  annotations:
+    tekton.dev/git-0: https://gitlab.wise-paas.com/ # Described below
+type: kubernetes.io/basic-auth
+stringData:
+  username: he.fei
+  password: hF15991964302fly
+  
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gitlab-propublic
+secrets:
+  - name: basic-propublic
+  
+  
+---
+   
+apiVersion: tekton.dev/v1alpha1
+kind: PipelineResource
+metadata:
+  name: resource-git-propublic
+spec:
+  type: git
+  params:
+   - name: url
+     value: https://gitlab.wise-paas.com/wise-paas-4.0-pipeline/propublic.git
+   - name: revison
+     value: master
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-task-storage
+spec:
+  resources:
+    requests:
+      storage: 64Mi
+  storageClassName: default
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce 
+---
+
+#Condition暂时不支持workspaces
+apiVersion: tekton.dev/v1alpha1
+kind: Condition
+metadata:
+  name: verify-file
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: "path"
+      type: string
+  check:
+    image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+    script: |
+      path="$(workspaces.storage.path)/$(params.path)"
+      if test ! -f "${path}"
+      then
+        echo "$(params.path) does not exist"
+        exit 1
+      else
+        res=$(cat ${path})
+        if [ "$res" != "SUCCESS" ];then
+           echo "res is ${res}"
+           exit 1
+        fi
+        echo "${res}"
+        exit 0
+      fi
+    
+---
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-get-urls
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: listingsystemUrl
+      type: string
+      description: listingsystemUrl
+    - name: datacenterCode
+      type: string
+      description: datacenterCode
+  results:
+    - name: ssoUrl
+      description: ssoUrl
+    - name: serviceUrl
+      description: serviceUrl
+    - name: appbuyUrl
+      description: appbuyUrl
+    - name: mpUrl
+      description: mpUrl
+    - name: mpbuyUrl
+      description: mpbuyUrl
+    - name: externaldomain
+      description: externaldomain
+  steps:
+    - name: run-get-urls
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      script: |
+        con=true  
+        rm -rf $(workspaces.storage.path)/*
+        echo "START" > $(workspaces.storage.path)/get-urls.txt
+        curl $(params.listingsystemUrl)/datacenter?datacenterCode=$(params.datacenterCode) -k > datacenterUrl.json
+        sed -i 's/"api-/"api/g' datacenterUrl.json
+        datacenterUrlFile="datacenterUrl.json"
+        if [ ! -f "$datacenterUrlFile" ]; then
+            echo "datacenterUrlFile is not exist!"
+            echo "FAILURE" > $(workspaces.storage.path)/get-urls.txt
+            con=false
+        fi
+        if [ "$con" = true ] ; then
+            ssoUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apisso.externalUrl"`
+            serviceUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apiservice.externalUrl"`
+            appbuyUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apiappbuy.externalUrl"`
+            mpUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apimp.externalUrl"`
+            mpbuyUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apimpbuy.externalUrl"`
+            externaldomain=`echo ${datacenterUrl} | jq -r .ensaas.externalUrl`
+            echo -n $ssoUrl | tee $(results.ssoUrl.path);
+            echo -n $serviceUrl | tee $(results.serviceUrl.path);
+            echo -n $appbuyUrl | tee $(results.appbuyUrl.path);
+            echo -n $mpUrl | tee $(results.mpUrl.path);
+            echo -n $mpbuyUrl | tee $(results.mpbuyUrl.path);
+            echo -n $externaldomain | tee $(results.externaldomain.path);
+            echo "SUCCESS" > $(workspaces.storage.path)/get-urls.txt
+        fi
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-add-subscription-user
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: subscriptionId
+      type: string
+      description: subscriptionId
+    - name: datacenterCode
+      type: string
+      description: datacenterCode
+  results:
+    - name: ssoUsername
+      description: ssoUsername
+    - name: ssoPassword
+      description: ssoPassword
+    - name: userId
+      description: userId
+    - name: memberType
+      description: memberType
+    - name: identity
+      description: identity
+    - name: start_date
+      description: start_date
+    - name: end_date
+      description: end_date
+  steps:
+    - name: run-add-subscription-user
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(inputs.resources.resource-git-propublic.path)/"
+      script: |
+        echo "START" > $(workspaces.storage.path)/add-subscription-user.txt  
+        #===============================        
+        echo "Check the previous task!!"    
+        con=true       
+        lastFile="get-urls.txt"
+        lastFilepath="$(workspaces.storage.path)/$lastFile"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFile does not exist"
+            echo "FAILURE" > $(workspaces.storage.path)/add-subscription-user.txt
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $(workspaces.storage.path)/add-subscription-user.txt
+                con=false
+            fi
+            echo "${res}"
+        fi  
+        #===============================    
+        if [ "$con" = true ] ; then        
+            python3 addsubscriptionuser.py $(params.ssoUrl) $(params.subscriptionId) $(params.datacenterCode)
+            #echo "ssopassroot@email.com:ENSS_@)@))$)&@Ss0:39136144-5f7f-11ea-ae78-46ed7ab89632:PremierVIP:trial:04/28/2020:05/28/2020" >ssoinfo.txt
+            ssoinfoFile="ssoinfo.txt"
+            if [ ! -f "$ssoinfoFile" ]; then
+                echo "ssoinfoFile is not exist!"
+                echo "FAILURE" > $(workspaces.storage.path)/add-subscription-user.txt
+                con=false
+            fi
+        fi
+        if [ "$con" = true ] ; then  
+            cat ssoinfo.txt
+            ssoUsername=`awk -F: '{print $1}' ssoinfo.txt`
+            ssoPassword=`awk -F: '{print $2}' ssoinfo.txt`
+            userId=`awk -F: '{print $3}' ssoinfo.txt`
+            memberType=`awk -F: '{print $4}' ssoinfo.txt`
+            identity=`awk -F: '{print $5}' ssoinfo.txt`
+            start_date=""
+            end_date=""
+            if [ "$identity" == "trial" ];then
+                start_date=`awk -F: '{print $6}' ssoinfo.txt`
+                end_date=`awk -F: '{print $7}' ssoinfo.txt`
+            fi
+            echo -n $ssoUsername | tee $(results.ssoUsername.path);
+            echo -n $ssoPassword | tee $(results.ssoPassword.path);
+            echo -n $userId | tee $(results.userId.path);
+            echo -n $memberType | tee $(results.memberType.path);
+            echo -n $identity | tee $(results.identity.path);
+            echo -n $start_date | tee $(results.start_date.path);
+            echo -n $start_date | tee $(results.end_date.path);
+            echo "SUCCESS" > $(workspaces.storage.path)/add-subscription-user.txt
+        fi
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-create-workspace
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: ssoUsername
+      type: string
+      description: ssoUsername
+    - name: ssoPassword
+      type: string
+      description: ssoPassword
+    - name: userId
+      type: string
+      description: userId
+    - name: memberType
+      type: string
+      description: memberType
+    - name: identity
+      type: string
+      description: identity   
+    - name: mpbuyUrl
+      type: string
+      description: mpbuyUrl   
+    - name: spaceInfo
+      type: string
+    - name: cluster
+      type: string
+    - name: datacenterCode
+      type: string
+    - name: subscriptionId
+      type: string
+    - name: transactionId
+      type: string
+    - name: workspaceName
+      type: string
+    - name: listingsystemUrl
+      type: string
+  results:
+    - name: clusterinfoDefault
+      description: clusterinfoDefault
+    - name: clusterinfoDeviceon
+      description: clusterinfoDeviceon
+    - name: serviceInstanceId
+      description: serviceInstanceId
+    - name: clusterCluster
+      description: clusterCluster
+    - name: clusterWorkspaceId
+      description: clusterWorkspaceId
+    - name: clusterNamespace
+      description: clusterNamespace
+    - name: deviceonNamespace
+      description: deviceonNamespace
+  steps:
+    - name: run-create-workspace
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |        
+        echo "START" > $(workspaces.storage.path)/create-workspace.txt
+        #===============================
+        echo "Check the previous task!!"
+        con=true        
+        lastFile="add-subscription-user.txt"
+        lastFilepath="$(workspaces.storage.path)/$lastFile"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFile does not exist"
+            echo "FAILURE" > $(workspaces.storage.path)/create-workspace.txt
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $(workspaces.storage.path)/create-workspace.txt
+                con=false
+            fi
+        fi 
+        #===============================
+        if [ "$con" = true ] ; then
+            namespaceName="default,deviceon"
+            workspaceName="0"
+            python3 createworkspace.py $(params.memberType) $(params.transactionId) $(params.datacenterCode) $(params.userId) $(params.subscriptionId) $(params.listingsystemUrl) $(params.ssoUsername) $(params.ssoPassword) $(params.mpbuyUrl) $(params.cluster)  $(params.spaceInfo) ${namespaceName} ${workspaceName}
+            ls -l
+        fi
+        returnStrFile="return_str.txt"
+        if [ ! -f "$returnStrFile" ]; then 
+            echo "returnStrFile is not exist!"
+            echo "FAILURE" > $(workspaces.storage.path)/create-workspace.txt
+            con=false
+        fi
+        if [ "$con" = true ] ; then
+            cat return_str.txt
+            clusterinfoDefault=`awk '{print $1}' return_str.txt`
+            clusterinfoDeviceon=`awk '{print $2}' return_str.txt`
+            serviceInstanceId=`awk '{print $3}' return_str.txt`
+            clusterCluster=`echo ${clusterinfoDefault} | awk -F: '{print $2}'`
+            clusterWorkspaceId=`echo ${clusterinfoDefault} | awk -F: '{print $3}'`
+            clusterNamespace=`echo ${clusterinfoDefault} | awk -F: '{print $5}'`
+            deviceonNamespace=`echo ${clusterinfoDeviceon} | awk -F: '{print $5}'`              
+            echo -n $clusterinfoDefault | tee $(results.clusterinfoDefault.path);
+            echo -n $clusterinfoDeviceon | tee $(results.clusterinfoDeviceon.path);
+            echo -n $serviceInstanceId | tee $(results.serviceInstanceId.path);
+            echo -n $clusterCluster | tee $(results.clusterCluster.path);
+            echo -n $clusterWorkspaceId | tee $(results.clusterWorkspaceId.path);
+            echo -n $clusterNamespace | tee $(results.clusterNamespace.path);
+            echo -n $deviceonNamespace | tee $(results.deviceonNamespace.path);
+            echo "SUCCESS" > $(workspaces.storage.path)/create-workspace.txt
+        fi
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-create-db
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: serviceUrl
+      type: string
+      description: serviceUrl
+    - name: ssoUsername
+      type: string
+      description: ssoUsername
+    - name: ssoPassword
+      type: string
+      description: ssoPassword
+    - name: clusterinfoDefault
+      type: string
+      description: clusterinfoDefault
+    - name: chargeType
+      type: string
+      description: chargeType 
+    - name: databaseInfo
+      type: string
+    - name: subscriptionId
+      type: string
+    - name: transactionId
+      type: string
+    - name: ifCreatenewdb
+      type: string
+    - name: serviceName
+      type: string
+  steps:
+    - name: run-create-db
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        echo "START" > $(workspaces.storage.path)/$(params.serviceName).txt
+        #===============================
+        echo "Check the previous task!!"   
+        con=true
+        lastFile="create-workspace.txt"       
+        lastFilePath="$(workspaces.storage.path)/create-workspace.txt"
+        if test ! -f $lastFilePath
+        then
+            echo "$lastFile does not exist"
+            echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+            con=false
+        else
+            res=$(cat ${lastFilePath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+                con=false
+            fi
+        fi 
+        #===============================
+        mkdir $(params.serviceName)
+        cd $(params.serviceName)
+        n=`echo $(params.databaseInfo) | awk -F, '{ total = total + NF }; END { print total }'`
+        echo $n
+        databaseInfo=""
+        for((i=1;i<=$n;i++));do
+            database=`echo $(params.databaseInfo) | awk -F, '{sum=i;print $'$i'}'`
+            if [[ $database =~ $(params.serviceName) ]]
+            then
+                databaseInfo=$database
+            fi
+        done
+        if [ $databaseInfo == "" ]
+        then
+            echo "There is no need to deploy $(params.serviceName)"
+            echo "SUCCESS" > $(workspaces.storage.path)/$(params.serviceName).txt
+            con=false
+        fi
+        if [ "$con" = true ] ; then
+            python3 ../createdbserviceinstance.py $(params.ssoUsername) $(params.ssoPassword) $(params.ssoUrl) $(params.clusterinfoDefault) $(params.chargeType) ${databaseInfo} $(params.subscriptionId) $(params.transactionId) $(params.serviceUrl)  $(params.ifCreatenewdb) null
+            ls -l
+            dataServiceFile="dataService.json"
+            if [ ! -f "$dataServiceFile" ]; then 
+              echo "dataServiceFile is not exist!"
+              echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+              con=fals
+            fi
+        fi
+        if [ "$con" = true ] ; then
+            database=`cat dataService.json | jq -r .dataServiceinfo`
+            if [ "${database}" = "null" ]; then 
+              echo "database is null!"
+              echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+              con=fals
+            fi
+        fi
+        if [ "$con" = true ] ; then
+            if [ -f "dashboardurl.json" ]; then 
+              dashboardurl="$(cat dashboardurl.json)###"
+              echo ${dashboardurl} >> $(workspaces.storage.path)/dashboardurl.txt
+            fi
+            dataService="$(cat dataService.json)###"
+            echo ${dataService} >> $(workspaces.storage.path)/dataService.txt
+            echo "SUCCESS" > $(workspaces.storage.path)/$(params.serviceName).txt
+        fi
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-get-dataservice
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  steps:
+    - name: run-get-dataService
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        path="$(workspaces.storage.path)/get-dataService.txt"
+        echo "START" > path
+        #===============================
+        echo "Check the previous task!!"  
+        con=true       
+        lastFile="PostgreSQL.txt,MongoDB.txt,RabbitMQ.txt,Redis.txt,AFS.txt"
+        n=`echo ${lastFile} | awk -F, '{ total = total + NF }; END { print total }'`
+        echo $n
+        for((i=1;i<=$n;i++));do
+            dbFile=`echo ${lastFile} | awk -F, '{sum=i;print $'$i'}'`
+            if test ! -f "$(workspaces.storage.path)/$dbFile"
+            then
+                echo "$dbFile does not exist"
+                echo "FAILURE" > $path
+                con=false
+            else
+                res=$(cat "$(workspaces.storage.path)/$dbFile")
+                if [ "$res" != "SUCCESS" ];then
+                    echo "res is ${res}"
+                    echo "FAILURE" > $path
+                    con=false
+                fi
+            fi 
+        done
+        #===============================
+        if [ "$con" = true ] ; then
+            python3 getdataservice.py $(workspaces.storage.path)/dataService.txt
+            dataServiceFile="dataService.json"
+            if [ ! -f "$dataServiceFile" ]; then 
+                echo "dataServiceFile is not exist!"
+                echo "FAILURE" > $path
+                con=false
+            fi
+            dataServiceFile="dataService.json"
+            if [ ! -f "$dataServiceFile" ]; then 
+                echo "dataServiceFile is not exist!"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi
+        if [ "$con" = true ] ; then
+            cat dataService.json > $(workspaces.storage.path)/dataService.json
+            echo "SUCCESS" > $path
+        fi
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-create-app
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: ssoUsername
+      type: string
+      description: ssoUsername
+    - name: ssoPassword
+      type: string
+      description: ssoPassword
+    - name: clusterInfo
+      type: string
+    - name: chargeType
+      type: string
+      description: chargeType 
+    - name: appbuyUrl
+      type: string
+      description: appbuyUrl 
+    - name: subscriptionId
+      type: string
+    - name: transactionId
+      type: string
+    - name: listingsystemUrl
+      type: string
+    - name: serviceName
+      type: string
+  steps:
+    - name: run-create-app
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        echo "START" > $(workspaces.storage.path)/$(params.serviceName).txt
+        #===============================
+        echo "Check the previous task!!"        
+        lastFile="get-dataService.txt"
+        lastFilepath="$(workspaces.storage.path)/$lastFile"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFile does not exist"
+            echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+                con=false
+            fi
+        fi 
+        #===============================
+        if [ "$con" = true ] ; then
+            mkdir $(params.serviceName)
+            cd $(params.serviceName)        
+            n=`echo $(params.serviceInfo) | awk -F, '{ total = total + NF }; END { print total }'`
+            echo $n
+            for((i=1;i<=$n;i++));do
+                service=`echo $(params.serviceInfo) | awk -F, '{sum=i;print $'$i'}'`
+                if [[ $service =~ $(params.serviceName) ]]
+                then
+                    python3 createappserviceinstanceid.py ${service} $(params.ssoUsername) $(params.ssoPassword) $(params.ssoUrl) $(params.clusterInfo) $(params.chargeType) $(params.appbuyUrl) $(workspaces.storage.path)/dataService.json $(params.subscriptionId) $(params.transactionId) $(params.listingsystemUrl)  
+                fi
+            done
+            urlprefixFile="urlprefix.json"
+            if [ ! -f "result.txt" ]; then 
+                echo "result.txt is exist!"
+                echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+                con=false
+            fi
+        fi
+        if [ "$con" = true ] ; then
+            if [ ! -f "${urlprefixFile}" ]; then 
+                echo "urlprefixFile is not exist!"
+                echo "FAILURE" > $(workspaces.storage.path)/$(params.serviceName).txt
+                con=false
+            fi
+        fi
+        if [ "$con" = true ] ; then
+            urlprefix="$(cat urlprefix.json)###"
+            echo ${urlprefix} >> $(workspaces.storage.path)/urlprefix.txt
+            echo "SUCCESS" > $(workspaces.storage.path)/$(params.serviceName).txt
+        fi
+        
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-somke-test
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: subscriptionId
+      type: string
+    - name: dentity
+      type: string
+    - name: startDate
+      type: string
+    - name: endDate
+      type: string
+    - name: clusterNamespace
+      type: string
+    - name: clusterCluster
+      type: string
+    - name: externaldomain
+      type: string
+    - name: deviceonNamespace
+      type: string
+  steps:
+    - name: run-somke-test
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        path="$(workspaces.storage.path)/somke-test.txt"
+        echo "START" > path
+        #===============================
+        echo "Check the previous task!!" 
+        con=true       
+        lastFile="DataHub.txt,Dashboard.txt,SaaS-Composer.txt,DeviceOn.txt,Notification.txt"
+        n=`echo ${lastFile} | awk -F, '{ total = total + NF }; END { print total }'`
+        echo $n
+        for((i=1;i<=$n;i++));do
+            dbFile=`echo ${lastFile} | awk -F, '{sum=i;print $'$i'}'`
+            if test ! -f "$(workspaces.storage.path)/$dbFile"
+            then
+                echo "$dbFile does not exist"
+                echo "FAILURE" > $path
+                con=false
+            else
+                res=$(cat "$(workspaces.storage.path)/$dbFile")
+                if [ "$res" != "SUCCESS" ];then
+                    echo "res is ${res}"
+                    echo "FAILURE" > $path
+                    con=false
+                fi
+            fi 
+        done
+        #===============================
+        if [ "$con" = true ] ; then
+            sleep 60
+            python3 somketest.py $(workspaces.storage.path)/urlprefix.txt $(workspaces.storage.path)/dashboardurl.txt $(params.dentity) $(params.subscriptionId) $(params.startDate) $(params.endDate) $(params.clusterNamespace) $(params.clusterCluster)
+                  $(params.externaldomain) $(params.deviceonNamespace)
+            cat success_str.txt > $(workspaces.storage.path)/success_str.txt
+        fi
+        if [ "$con" = true ] ; then 
+            cat failed_str.txt > $(workspaces.storage.path)/failed_str.txt
+            echo "FAILURE" > $path 
+            con=false        
+        fi
+        if [ "$con" = true ] ; then
+            echo "SUCCESS" > $path   
+        fi
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-check-all-task
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: serviceInfo
+      type: string
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: serviceUrl
+      type: string
+      description: serviceUrl
+    - name: appbuyUrl
+      type: string
+      description: appbuyUrl
+    - name: ssoUsername
+      type: string
+      description: ssoUsername
+    - name: ssoPassword
+      type: string
+      description: ssoPassword
+    - name: clusterinfoDefault
+      type: string
+      description: clusterinfoDefault
+    - name: chargeType
+      type: string
+      description: chargeType 
+    - name: databaseInfo
+      type: string
+    - name: subscriptionId
+      type: string
+    - name: transactionId
+      type: string
+    - name: listingsystemUrl
+      type: string
+    - name: datacenterCode
+      type: string
+    - name: clusterinfoDeviceon
+      type: string
+    - name: clusterinfoDefault
+      type: string
+    - name: serviceInstanceId
+      type: string
+  steps:
+    - name: run-check-all-task
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        #!/bin/sh
+        path="$(workspaces.storage.path)/check-all-task.txt"
+        echo "START" > path
+        #===============================
+        echo "Check the previous task!!"
+        con=true        
+        lastFile="somke-test.txt"
+        lastFilepath="$(workspaces.storage.path)/$lastFile"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFile does not exist"
+            echo "FAILURE" > $path
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi 
+        #===============================
+        if [ "$con" = true ] ; then
+            somkeTestFile="somke-test.txt"
+            res=$(cat $(workspaces.storage.path)/${somkeTestFile}
+            rollback=false
+            if test ! -f "$(workspaces.storage.path)/${somkeTestFile}"
+            then
+              echo "${somkeTestFile} does not exist"
+              rollback=true
+            else
+              if [ "$res" != "SUCCESS" ];then
+                 echo "res is ${res}"
+                 rollback=true
+              fi
+            fi
+            if [ $rollback ]; then
+                n=`echo $(params.serviceInfo) | awk -F, '{ total = total + NF }; END { print total }'`
+                echo $n
+                deviceonServiceInfo=""
+                defaultServiceInfo=""
+                for((i=1;i<=$n;i++));do
+                  service=`echo $(params.serviceInfo) | awk -F, '{sum=i;print $'$i'}'`
+                  if [[ $service =~ "Deviceon" ]]
+                  then
+                    deviceonServiceInfo=$service
+                  else
+                    defaultServiceInfo="${service},"
+                    fi
+                done
+                defaultServiceInfo=${defaultServiceInfo: -1}
+                echo "deleteappserviceinstance"
+                python3 deleteappserviceinstance.py  $(params.ssoUsername) $(params.ssoPassword) $(params.ssoUrl) $(params.appbuyUrl) ${deviceonServiceInfo}  $(params.subscriptionId) $(params.transactionId) $(params.clusterinfoDeviceon)
+                python3 deleteappserviceinstance.py  $(params.ssoUsername) $(params.ssoPassword) $(params.ssoUrl) $(params.appbuyUrl) ${defaultServiceInfo} $(params.subscriptionId) $(params.transactionId) $(params.clusterinfoDefault)
+                echo "deletedbinstanceandbinding"
+                if test ! -f "$(workspaces.storage.path)/${somkeTestFile}"
+                then
+                  python3 deletedbinstanceandbinding.py 1 $(params.ssoUsername) $(params.ssoPassword) $(params.ssoUrl) $(params.serviceurl) $(workspaces.storage.path)/dataService.json $(subscriptionId) $(clusterinfo_default)
+                fi
+                echo "deleteworkspace"
+                python3 deleteworkspace.py $(params.datacenterCode) $(params.listingsystemUrl) $(params.ssoUsername) $(params.ssoPassword) $(params.serviceInstanceId) $(params.mpbuyUrl) $(params.subscriptionId) 0
+            fi
+            echo "SUCCESS" > $path  
+        fi            
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-delete-subuser
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  workspaces:
+  - name: storage
+  params:
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: subscriptionId
+      type: string
+      description: subscriptionId
+    - name: userId
+      type: string
+      description: userId
+    - name: ssoUsername
+      type: string
+      description: ssoUsername
+    - name: ssoPassword
+      type: string
+      description: ssoPassword
+  steps:
+    - name: run-delete-subuser
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        path="$(workspaces.storage.path)/delete-subuser.txt"
+        echo "START" > path
+        python3 deletesubscriptionuser.py $(params.ssoUrl) $(params.subscriptionId) $(params.userId) $(params.ssoUsername) $(params.ssoPassword)
+        echo "SUCCESS" > $path     
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-send-mail
+spec:
+  resources:
+    inputs:
+      - name: resource-git-propublic
+        type: git
+  params:
+    - name: userEmail
+      type: string
+      description: userEmail
+    - name: identity
+      type: string
+      description: identity
+  workspaces:
+  - name: storage
+  steps:
+    - name: run-send-mail
+      image: harbor.arfa.wise-paas.com/hefei/alpine:1.0.0.5
+      workingDir: "$(resources.inputs.resource-git-propublic.path)/"
+      script: |
+        path="$(workspaces.storage.path)/send-mail.txt"
+        echo "START" > path
+        result=true
+        if test ! -f "$(workspaces.storage.path)/delete-subuser.txt"
+        then
+          echo "$delete-subuser.txt does not exist"
+          result=false
+        else
+          res=$(cat $(workspaces.storage.path)/$(params.path))
+          if [ "$res" != "SUCCESS" ];then
+             echo "res is ${res}"
+             result=false
+          fi
+        fi
+        if test -f "$(workspaces.storage.path)/failed_str.txt"
+        then
+          echo "$failed_str.txt is exist"
+          result=false
+        fi
+        if test -f "$(workspaces.storage.path)/success_str.txt"
+        then
+          echo "$success_str.txt is exist"
+          result=false
+        fi
+        if [ $result ];then
+          sendmessage = ""
+          userEmail=$(params.userEmail)
+          success_str=$(cat $(workspaces.storage.path)/success_str.txt)
+          if [ "${userEmail}"="ssopassroot@email.com" ];then
+            targetEmail = "WISE-PaaS.SRE@advantech.com"
+            #targetEmail = "he.fei@advantech.com.cn"
+          fi
+          if [ "$(params.identity)" = "trial" ];then
+            python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" $(params.userEmail) "Delivery success" "trialdeliverynotice.html" ${success_str} ${sendmessage}
+          esle
+            python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" $(params.userEmail) "Delivery success" "officialdeliverynotice.html" ${success_str} ${sendmessage}
+          fi
+        else
+          targetEmail = "WISE-PaaS.SRE@advantech.com"
+          #targetEmail = "he.fei@advantech.com.cn"
+          sendmessage="User:$(params.userEmail),service deployment failed\n\nFeel free to contact us if you have any questions. Thank you!\n\nWISE-PaaS/EnSaaS Team"
+          python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" ${targetEmail} "Delivery failed" "0" "0" ${sendmessage}
+        fi
+        echo "SUCCESS" > $path          
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: pipeline-i.app-starter-package
+spec:
+  resources:
+    - name: resource-git-propublic
+      type: git
+  params:
+    - name: serviceInfo
+      type: string
+      description: serviceInfo
+    - name: databaseInfo
+      type: string
+      description: databaseInfo
+    - name: spaceInfo
+      type: string
+      description: spaceInfo
+    - name: cluster
+      type: string
+      description: cluster
+    - name: datacenterCode
+      type: string
+      description: datacenterCode
+    - name: subscriptionId
+      type: string
+      description: subscriptionId
+    - name: chargeType
+      type: string
+      description: chargeType
+    - name: transactionId
+      type: string
+      description: transactionId
+    - name: userEmail
+      type: string
+      description: userEmail
+    - name: workspaceName
+      type: string
+      description: workspaceName
+    - name: listingsystemUrl
+      type: string
+      description: listingsystemUrl
+    - name: ifCreatenewdb
+      type: string
+      description: ifCreatenewdb
+  workspaces:
+  - name: shared-data
+  tasks:
+    - name: task-get-urls
+      retries: 5
+      taskRef:
+        name: task-get-urls
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+    - name: task-add-subscription-user
+      retries: 5
+      taskRef:
+        name: task-add-subscription-user
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-get-urls
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "get-urls.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+    - name: task-create-workspace
+      retries: 5
+      taskRef:
+        name: task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-add-subscription-user
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "add-subscription-user.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: userId
+          value: $(tasks.task-add-subscription-user.userId)
+        - name: memberType
+          value: $(tasks.task-add-subscription-user.memberType)
+        - name: identity
+          value: $(tasks.task-add-subscription-user.identity)
+        - name: mpbuyUrl
+          value: $(tasks.task-get-urls.results.mpbuyUrl) 
+        - name: spaceInfo
+          value: $(params.spaceInfo)
+        - name: cluster
+          value: $(params.cluster)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: workspaceName
+          value: $(params.workspaceName)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+    - name: task-create-db-postgresql
+      retries: 5
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "add-subscription-user.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-urls.results.serviceUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: databaseInfo
+          value: $(params.databaseInfo)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: ifCreatenewdb
+          value: $(params.ifCreatenewdb)
+        - name: serviceName
+          value: "PostgreSQL"
+    - name: task-create-db-mongodb
+      retries: 5
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "create-workspace.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-urls.results.serviceUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: databaseInfo
+          value: $(params.databaseInfo)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: ifCreatenewdb
+          value: $(params.ifCreatenewdb)
+        - name: serviceName
+          value: "MongoDB"
+    - name: task-create-db-rabbitmq
+      retries: 5
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "create-workspace.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-urls.results.serviceUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: databaseInfo
+          value: $(params.databaseInfo)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: ifCreatenewdb
+          value: $(params.ifCreatenewdb)
+        - name: serviceName
+          value: "RabbitMQ"
+    - name: task-create-db-redis
+      retries: 5
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "create-workspace.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-urls.results.serviceUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: databaseInfo
+          value: $(params.databaseInfo)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: ifCreatenewdb
+          value: $(params.ifCreatenewdb)
+        - name: serviceName
+          value: "Redis"
+    - name: task-create-db-afs
+      retries: 5
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "create-workspace.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-urls.results.serviceUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: databaseInfo
+          value: $(params.databaseInfo)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: ifCreatenewdb
+          value: $(params.ifCreatenewdb)
+        - name: serviceName
+          value: "AFS"
+    - name: task-get-dataservice
+      retries: 5
+      taskRef:
+        name: task-get-dataservice
+      runAfter:
+      - task-create-db-postgresql
+      - task-create-db-mongodb
+      - task-create-db-rabbitmq
+      - task-create-db-redis
+      - task-create-db-afs
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "PostgreSQL.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "MongoDB.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "RabbitMQ.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "Redis.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "AFS.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+    - name: task-create-app-datahub
+      retries: 5
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "get-dataServices.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterInfo
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: appbuyUrl
+          value: $(tasks.task-get-urls.results.appbuyUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: serviceName
+          value: "DataHub"
+    - name: task-create-app-dashboard
+      retries: 5
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "get-dataServices.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterInfo
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: appbuyUrl
+          value: $(tasks.task-get-urls.results.appbuyUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: serviceName
+          value: "Dashboard"
+    - name: task-create-app-saas-composer
+      retries: 5
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "get-dataServices.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterInfo
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: appbuyUrl
+          value: $(tasks.task-get-urls.results.appbuyUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: serviceName
+          value: "SaaS-Composer"
+    - name: task-create-app-deviceon
+      retries: 5
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "get-dataServices.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterInfo
+          value: $(tasks.task-create-workspace.results.clusterinfoDeviceOn)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: appbuyUrl
+          value: $(tasks.task-get-urls.results.appbuyUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: serviceName
+          value: "DeviceOn"
+    - name: task-create-app-notification
+      retries: 5
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "get-dataServices.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterInfo
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: appbuyUrl
+          value: $(tasks.task-get-urls.results.appbuyUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: serviceName
+          value: "Notification"
+    - name: task-somke-test
+      retries: 15
+      taskRef:
+        name: task-somke-test
+      runAfter:
+      - task-create-app-datahub
+      - task-create-app-dashboard
+      - task-create-app-saas-composer
+      - task-create-app-deviceon
+      - task-create-app-notification
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "DataHub.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "Dashboard.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "SaaS-Composer.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "DeviceOn.txt"
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "Notification.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: dentity
+          value: $(tasks.task-add-subscription-user.identity)
+        - name: startDate
+          value: $(tasks.task-add-subscription-user.startDate)
+        - name: endDate
+          value: $(tasks.task-add-subscription-user.endDate)
+        - name: clusterNamespace
+          value: $(tasks.task-create-workspace.results.clusterNamespace)
+        - name: clusterCluster
+          value: $(tasks.task-create-workspace.results.clusterCluster)
+        - name: externaldomain
+          value: $(tasks.task-get-urls.results.externaldomain)
+        - name: deviceonNamespace
+          value: $(tasks.task-create-workspace.results.deviceonNamespace
+    - name: task-check-all-task
+      retries: 5
+      taskRef:
+        name: task-check-all-task
+      runAfter:
+      - task-somke-test
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      #conditions:
+        #- conditionRef: "verify-file"
+          #params:
+            #- name: "ws"
+              #value: $(workspaces.storage.path)
+            #- name: "path"
+              #value: "somke-test.txt"
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: serviceInfo
+          value: $(params.serviceInfo)
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-urls.results.serviceUrl)
+        - name: appbuyUrl
+          value: $(tasks.task-get-urls.results.appbuyUrl)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: chargeType
+          value: $(params.chargeType)
+        - name: databaseInfo
+          value: $(params.databaseInfo)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: transactionId
+          value: $(params.transactionId)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+        - name: clusterinfoDeviceon
+          value: $(tasks.task-create-workspace.results.clusterinfoDeviceon)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: serviceInstanceId
+          value: $(tasks.task-create-workspace.results.serviceInstanceId)  
+    - name: task-delete-subuser
+      retries: 5
+      taskRef:
+        name: task-delete-subuser
+      runAfter:
+      - task-check-all-task
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: ssoUrl
+          value: $(tasks.task-get-urls.results.ssoUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+        - name: userId
+          value: $(tasks.task-add-subscription-user.userId)
+        - name: ssoUsername
+          value: $(tasks.task-add-subscription-user.results.ssoUsername)
+        - name: ssoPassword
+          value: $(tasks.task-add-subscription-user.results.ssoPassword)
+    - name: task-send-mail
+      retries: 5
+      taskRef:
+        name: task-send-mail
+      runAfter:
+      - task-delete-subuser
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      resources:
+        inputs:
+          - name: resource-git-propublic
+            resource: resource-git-propublic
+      params:
+        - name: userEmail
+          value: $(params.userEmail)
+        - name: identity
+          value: $(tasks.task-add-subscription-user.identity)
+  results:
+    - name: ssoUrl
+      description: ssoUrl
+      value: $(tasks.task-get-urls.results.ssoUrl)
+    - name: serviceUrl
+      value: $(tasks.task-get-urls.results.serviceUrl)
+    - name: mpbuyUrl
+      description: mpbuyUrl
+      value: $(tasks.task-get-urls.results.mpbuyUrl)
+    - name: externaldomain
+      description: externaldomain
+      value: $(tasks.task-get-urls.results.externaldomain)
+    - name: ssoUsername
+      description: ssoUsername
+      value: $(tasks.task-add-subscription-user.results.ssoUsername)
+    - name: ssoPassword
+      description: ssoPassword
+      value: $(tasks.task-add-subscription-user.ssoPassword)
+    - name: userId
+      description: userId
+      value: $(tasks.task-add-subscription-user.userId)
+    - name: memberType
+      description: memberType
+      value: $(tasks.task-add-subscription-user.memberType)
+    - name: identity
+      description: identity
+      value: $(tasks.task-add-subscription-user.identity)
+    - name: startDate
+      description: startDate
+      value: $(tasks.task-add-subscription-user.startDate)
+    - name: endDate
+      description: endDate
+      value: $(tasks.task-add-subscription-user.endDate)
+    - name: clusterinfoDefault
+      value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+    - name: clusterinfoDeviceon
+      value: $(tasks.task-create-workspace.results.clusterinfoDeviceon)
+    - name: serviceInstanceId
+      value: $(tasks.task-create-workspace.results.serviceInstanceId)
+    - name: clusterCluster
+      value: $(tasks.task-create-workspace.results.clusterCluster)
+    - name: clusterWorkspaceId
+      value: $(tasks.task-create-workspace.results.clusterWorkspaceId)
+    - name: clusterNamespace
+      value: $(tasks.task-create-workspace.results.clusterNamespace)
+    - name: deviceonNamespace
+      value: $(tasks.task-create-workspace.results.deviceonNamespace)
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: pipelinerun-i.app-starter-package
+spec:
+  serviceAccountName: gitlab-propublic
+  pipelineRef:
+    name: pipeline-i.app-starter-package
+  workspaces:
+  - name: shared-data
+    persistentVolumeClaim:
+      claimName: shared-task-storage
+  resources:
+    - name: resource-git-propublic
+      resourceRef:
+        name: resource-git-propublic
+  params: 
+    - name: serviceInfo
+      value: "DataHub:Small:9806WAC010:1:Basic,Dashboard:Advanced-Edition:9806WPDASH:1:Basic,SaaS-Composer:Advanced:9806WPSC01:1:Basic,DeviceOn:Standard:9806WPDO02:1:Basic,Notification:Standard:9806WPSC02:1:Basic"  
+    - name: databaseInfo
+      value: "PostgreSQL:Shared:980GEDPA000:1:Basic,MongoDB:Shared:980GEDMA000:1:Basic,RabbitMQ:standard:980GEMRA000:1:Basic,Redis:Containerized:980GEDRK000:1:Basic,AFS:Standard:9806WPAFS0:1:Basic"
+    - name: spaceInfo
+      value: "EnSaaS-K8s-Service:General-Workspace:980GENDC1HZ:3:Basic"
+    - name: cluster
+      value: "ews001"
+    - name: datacenterCode
+      value: "bm"
+    - name: subscriptionId
+      value: "67151f36266e200fab49c8f7d43643a3"
+    - name: chargeType
+      value: "Monthly"
+    - name: transactionId
+      value: "76983c64-6611-4f9e-85ca-becfc236618d"
+    - name: userEmail
+      value: "894598156@qq.com"
+    - name: workspaceName
+      value: "#"
+    - name: listingsystemUrl
+      value: "https://api-listingsystem-ensaas.bm.wise-paas.com.cn/v1"
+    - name: ifCreatenewdb
+      value: "True"
