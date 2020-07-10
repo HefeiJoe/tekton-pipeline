@@ -1,0 +1,60 @@
+affinity: {}
+envs:
+- name: SERVICE_HOST
+  value: 0.0.0.0
+- name: SERVICE_PORT
+  value: "80"
+- name: JENKINS_HOST
+  value: http://172.21.92.193
+- name: JENKINS_USERNAME
+  value: admin
+- name: JENKINS_PASSWORD
+  value: aUE0TDBza21nSw==
+- name: LISTINGSYSTEM_URL
+  value: https://api-listingsystem-ensaas.hz.wise-paas.com.cn/v1
+- name: TEKTON_URL
+  value: http://api-tekton-pipeline-eks001.hz.wise-paas.com.cn/v1
+- name: NAMESPACE
+  value: tektonpod
+- name: GITHUB_URL
+  value: https://gitlab.wise-paas.com/wise-paas-4.0-pipeline/i.app-starter-package.git
+- name: GITHUB_REANCH
+  value: tektonpipeline
+- name: GITHUB_USERNAME
+  value: he.fei
+- name: GITHUB_PASSWORD
+  value: aEYxNTk5MTk2NDMwMg==
+- name: DATA_CENTER_CODE
+  value: hz
+- name: PIPELINE_TYPE
+  value: tekton
+fullnameOverride: ""
+image:
+  pullPolicy: Always
+  repository: harbor.arfa.wise-paas.com/hefei/pipeline
+imagePullSecrets: []
+ingress:
+  annotations: {}
+  enabled: true
+  hosts:
+  - host: api-pipeline.pipeline.eks001.en.internal
+    paths:
+    - /
+  tls: []
+nameOverride: ""
+nodeSelector: {}
+podSecurityContext: {}
+replicaCount: 1
+resources:
+  limits:
+    cpu: 200m
+    ephemeral-storage: 256Mi
+    memory: 256Mi
+securityContext: {}
+service:
+  port: 80
+  type: ClusterIP
+serviceAccount:
+  create: true
+  name: pipeline
+tolerations: []
