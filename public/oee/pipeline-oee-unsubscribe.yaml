@@ -1,0 +1,141 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: pipeline-oee-unsubscribe
+spec:
+  params:
+    - name: servicePackageId
+      type: string
+    - name: listingsystemUrl
+      type: string
+    - name: subscriptionId
+      type: string
+    - name: datacenterCode
+      type: string
+  workspaces:
+  - name: shared-data
+  tasks:
+    - name: task-git-clone
+      retries: 4
+      taskRef:
+        name: task-git-clone
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: url
+          value: https://gitlab.wise-paas.com/wise-paas-4.0-pipeline/tekton-pipeline-public.git
+        - name: revision
+          value: master
+    - name: task-get-params
+      retries: 4
+      taskRef:
+        name: task-get-params
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-git-clone
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+    - name: task-get-serviceinfo
+      retries: 4
+      taskRef:
+        name: task-get-serviceinfo
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-get-params
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: catalogUrl
+          value: $(tasks.task-get-params.results.catalogUrl)
+        - name: servicePackageId
+          value: $(params.servicePackageId)
+    - name: task-unsubscribe-app
+      retries: 4
+      taskRef:
+        name: task-unsubscribe-app
+      runAfter:
+      - task-get-serviceinfo
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: appbuyUrl
+          value: $(tasks.task-get-params.results.appbuyUrl)
+    - name: task-unsubscribe-db
+      retries: 4
+      taskRef:
+        name: task-unsubscribe-db
+      runAfter:
+      - task-unsubscribe-app
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-params.results.serviceUrl)
+    - name: task-unsubscribe-ws
+      retries: 4
+      taskRef:
+        name: task-unsubscribe-ws
+      runAfter:
+      - task-unsubscribe-db
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: mpbuyUrl
+          value: $(tasks.task-get-params.results.mpbuyUrl)           
+    - name: task-send-unsubscribe-mail
+      retries: 1
+      taskRef:
+        name: task-send-unsubscribe-mail
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-unsubscribe-ws
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: subscriptionId
+          value: $(params.subscriptionId)
+  results:
+    - name: gitDirectory
+      value: $(tasks.task-git-clone.results.gitDirectory)
+    - name: ssoUrl
+      description: ssoUrl
+      value: $(tasks.task-get-params.results.ssoUrl)
+    - name: serviceUrl
+      value: $(tasks.task-get-params.results.serviceUrl)
+    - name: mpbuyUrl
+      value: $(tasks.task-get-params.results.mpbuyUrl)
+    - name: catalogUrl
+      value: $(tasks.task-get-params.results.catalogUrl)
+    - name: externaldomain
+      value: $(tasks.task-get-params.results.externaldomain)

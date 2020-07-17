@@ -1,0 +1,97 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-somke-test
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: subscriptionId
+      type: string
+    - name: dentity
+      type: string
+    - name: startDate
+      type: string
+    - name: endDate
+      type: string
+    - name: clusterNamespace
+      type: string
+    - name: clusterCluster
+      type: string
+    - name: externaldomain
+      type: string
+    - name: serviceConfigs
+      type: string
+    - name: ssoUrl
+      type: string
+    - name: listingsystemUrl
+      type: string
+    - name: lastTask
+      type: string
+  steps:
+    - name: run-somke-test
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        #!/usr/bin/env sh
+        path="somke-test.txt"
+        echo "START" > path
+        #===============================
+        echo "Check the previous task!!" 
+        con=true       
+        #lastFile="DataHub,Dashboard,SaaS-Composer,DeviceOn,Notification"
+        lastFile="$(params.lastTask)"
+        n=`echo ${lastFile} | awk -F, '{ total = total + NF }; END { print total }'`
+        echo $n
+        for i in $(seq 1 $n)
+        do
+            dbFile=`echo ${lastFile} | awk -F, -v awkVar="$i" '{sum=i;print $awkVar}'`
+            dbFileName="${dbFile}.txt"
+            if test ! -f "$dbFileName"
+            then
+                echo "$dbFileName does not exist"
+                echo "FAILURE" > $path
+                con=false
+                break
+            else
+                res=$(cat "$dbFileName")
+                if [ "$res" != "SUCCESS" ];then
+                    echo "${dbFileName},res is ${res}"
+                    echo "FAILURE" > $path
+                    con=false
+                    break
+                fi
+            fi 
+        done
+        #===============================
+        if [ "$con" = true ] ; then
+            sleep 60
+            clusterinfoDeviceon=`awk '{print $2}' return_str.txt`
+            deviceonNamespace=""
+            if [ ! -z "$clusterinfoDeviceon" ]; then
+                deviceonNamespace=`echo ${clusterinfoDeviceon} | awk -F: '{print $5}'`
+            fi
+            python3 somketest.py "$(params.serviceConfigs)" "$(params.dentity)" "$(params.subscriptionId)" "$(params.startDate)" "$(params.endDate)" "$(params.clusterNamespace)" "$(params.clusterCluster)" "$(params.externaldomain)" "${deviceonNamespace}" "$(params.ssoUrl)" "$(params.listingsystemUrl)"
+            successStr=$(cat success_str.txt)
+            echo $successStr
+            #if [ ! -z "$successStr" ]; then 
+            #    cat success_str.txt > success_str.txt
+            #fi
+            failedStr=$(cat failed_str.txt)
+            echo $failedStr
+            if [ ! -z "$failedStr" ]; then 
+                #rm $failed_str.txt
+                #echo $failedStr > failed_str.txt
+                echo "FAILURE" > $path 
+                con=false
+            else
+                echo "SUCCESS" > $path
+            fi
+        fi

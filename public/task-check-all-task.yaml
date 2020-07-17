@@ -1,0 +1,63 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-check-all-task
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: mpUrl
+      type: string
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: mpbuyUrl
+      type: string
+      description: mpbuyUrl
+    - name: appbuyUrl
+      type: string
+      description: appbuyUrl
+    - name: serviceUrl
+      type: string
+    - name: serviceConfigs
+      type: string
+    - name: lastTask
+      type: string
+  steps:
+    - name: run-check-all-task
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        path="check-all-task.txt"
+        echo "START" > path
+        #===============================
+        echo "Check the previous task!!"
+        rollback=false        
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFilepath does not exist"
+            echo "FAILURE" > $path
+            rollback=true
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                rollback=true
+            fi
+        fi 
+        #===============================
+        if [ $rollback = true ]; then
+            python3 rollback.py "$(params.mpUrl)" "$(params.ssoUrl)" "$(params.mpbuyUrl)" "$(params.appbuyUrl)" "$(params.serviceUrl)" "$(params.serviceConfigs)"
+            echo "FAILURE" > $path
+        else
+            echo "SUCCESS" > $path  
+        fi            

@@ -1,0 +1,87 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-import-dashboard
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: ssoUrl
+      type: string
+    - name: mpUrl
+      type: string
+    - name: clusterNamespace
+      type: string
+    - name: clusterCluster
+      type: string
+    - name: externaldomain
+      type: string
+    - name: datacenterCode
+      type: string
+    - name: lastTask
+      type: string
+  steps:
+    - name: run-import-dashboard
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        path="create-workspace.txt"
+        echo "START" > $path
+        #===============================
+        echo "Check the previous task!!"
+        con=true        
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFilepath does not exist"
+            echo "FAILURE" > $path
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ]; then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi 
+        #===============================
+        if [ "$con" = true ] ; then
+            ssoUsername=""
+            ssoPassword=""
+            url_suffix="$(params.clusterNamespace)-$(params.clusterCluster).$(params.externaldomain)"
+            dashboard_url="https://dashboard-${url_suffix}"
+            dashboard_resource="https://gitlab.wise-paas.com/wise-paas-4.0-pipeline/wisemplus.git"
+            datasource_replace="wisemplus_org.json,https://api-org-wise-mplus-${url_suffix}"
+            srpframe_replace="https://dashboard-adviiot-ene-pipeline.wise-paas.cn,https://dashboard-${url_suffix}***https://dashboard-adviiot-ene-pipeline.wise-paas.cn,https://dashboard-${url_suffix}"
+            python3 import_dashboard_1_3_0.py -u "${ssoUsername}" -p "${ssoPassword}" -a "${dashboard_url}" -t datasource -r "${datasource_replace}" -d "./resource/dashboardresource/datasource"
+            python3 import_dashboard_1_3_0.py -u "${ssoUsername}" -p "${ssoPassword}" -a "${dashboard_url}" -t file -d "./resource/dashboardresource/privateplugins" -o false
+            python3 getkubeconfig.py "$(params.datacenterCode)" "$(params.clusterCluster)" "$(params.ssoUrl)" "$(params.mpUrl)"
+            kubeconfigFile="kubeconfig.txt"
+            if [ ! -f "${kubeconfigFile}" ];then
+                echo "${kubeconfigFile} does not exist!"
+                echo "FAILURE" > $path
+            else
+                com="'BEGIN {FS=\" \"}; {print $1}'"
+                mkdir ~/.kube
+                mv kubeconfig.txt ~/.kube/config
+                servicepodname="dashboard"
+                kubectl get pod -n $(params.clusterNamespace) | grep ^${servicepodname} | awk ${com} > servicepod.txt
+                servicepodFile="servicepod.txt"
+                service=`cat ${servicepodFile}`
+                if [ ! -f "${servicepodFile}" ];then
+                    echo "${servicepodFile} does not exist!"
+                    echo "FAILURE" > $path
+                else
+                    kubectl delete pod ${service} -n $(params.clusterNamespace)
+                    rm ${servicepodFile}
+                    echo "SUCCESS" > $path
+                fi
+            fi
+        fi

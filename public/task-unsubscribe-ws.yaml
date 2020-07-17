@@ -1,0 +1,48 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-unsubscribe-ws
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: ssoUrl
+      type: string
+    - name: mpbuyUrl
+      type: string
+    - name: lastTask
+      type: string
+  steps:
+    - name: run-unsubscribe-ws
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        #!/usr/bin/env sh
+        echo "Check the previous task!!" 
+        con=true     
+        path="unsubscribe-ws.txt"
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f $lastFilePath
+        then
+            echo "$lastFilePath does not exist"
+            echo "FAILURE" > $path
+            con=false
+        else
+            res=$(cat ${lastFilePath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi 
+        if [ "$con" = true ] ; then
+            python3 unsubscribe_ws.py "$(params.ssoUrl)" "$(params.mpbuyUrl)" "./serviceInfo.json"
+            echo "SUCCESS" > $path                           
+        fi 

@@ -1,0 +1,402 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: pipeline-wisemplus
+spec:
+  params:
+    - name: serviceConfigs
+      type: string
+    - name: listingsystemUrl
+      type: string
+    - name: datacenterCode
+      type: string
+  workspaces:
+  - name: shared-data
+  tasks:
+    - name: task-git-clone-public
+      retries: 4
+      taskRef:
+        name: task-git-clone
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: url
+          value: https://gitlab.wise-paas.com/wise-paas-4.0-pipeline/tekton-pipeline-public.git
+        - name: revision
+          value: master
+    - name: task-git-clone-wisemplus
+      retries: 4
+      taskRef:
+        name: task-git-clone
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: url
+          value: https://gitlab.wise-paas.com/wise-paas-4.0-pipeline/oee.git
+        - name: revision
+          value: master
+        - name: subdirectory
+          value: resource
+    - name: task-get-params
+      retries: 4
+      taskRef:
+        name: task-get-params
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-git-clone
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: listingsystemUrl
+          value: $(params.listingsystemUrl)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+    - name: task-add-subscription-user
+      retries: 4
+      taskRef:
+        name: task-add-subscription-user
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-get-params
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+        - name: lastTask
+          value: "get-params"
+    - name: task-create-workspace
+      retries: 4
+      taskRef:
+        name: task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      runAfter:
+      - task-add-subscription-user
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: mpbuyUrl
+          value: $(tasks.task-get-params.results.mpbuyUrl)
+        - name: mpUrl
+          value: $(tasks.task-get-params.results.mpUrl)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: lastTask
+          value: "add-subscription-user"
+    - name: task-create-db-postgresql
+      retries: 4
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: serviceUrl
+          value: $(tasks.task-get-params.results.serviceUrl)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: serviceName
+          value: "PostgreSQL"
+        - name: lastTask
+          value: "create-workspace"
+    - name: task-create-db-mongodb
+      retries: 4
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: serviceUrl
+          value: $(tasks.task-get-params.results.serviceUrl)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: serviceName
+          value: "MongoDB"
+        - name: lastTask
+          value: "create-workspace"
+    - name: task-create-db-rabbitmq
+      retries: 4
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: serviceUrl
+          value: $(tasks.task-get-params.results.serviceUrl)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: serviceName
+          value: "RabbitMQ"
+        - name: lastTask
+          value: "create-workspace"
+    - name: task-create-db-redis
+      retries: 4
+      taskRef:
+        name: task-create-db
+      runAfter:
+      - task-create-workspace
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: serviceUrl
+          value: $(tasks.task-get-params.results.serviceUrl)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: serviceName
+          value: "Redis"
+        - name: lastTask
+          value: "create-workspace"
+    - name: task-get-dataservice
+      retries: 4
+      taskRef:
+        name: task-get-dataservice
+      runAfter:
+      - task-create-db-postgresql
+      - task-create-db-mongodb
+      - task-create-db-rabbitmq
+      - task-create-db-redis
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: lastTask
+          value: "PostgreSQL,MongoDB,RabbitMQ,Redis"
+    - name: task-create-app-dashboard
+      retries: 4
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: appbuyUrl
+          value: $(tasks.task-get-params.results.appbuyUrl)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: serviceName
+          value: "Dashboard"
+        - name: lastTask
+          value: "get-dataService" 
+    - name: task-create-app-saas-composer
+      retries: 4
+      taskRef:
+        name: task-create-app
+      runAfter:
+      - task-get-dataservice
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: clusterinfoDefault
+          value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: appbuyUrl
+          value: $(tasks.task-get-params.results.appbuyUrl)
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)
+        - name: serviceName
+          value: "DataHub"
+        - name: lastTask
+          value: "get-dataService"     
+    - name: task-somke-test
+      retries: 14
+      taskRef:
+        name: task-somke-test
+      runAfter:
+      - task-create-app-dashboard
+      - task-create-app-DataHub
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: subscriptionId
+          value: $(tasks.task-add-subscription-user.results.subscriptionId)
+        - name: dentity
+          value: $(tasks.task-add-subscription-user.results.identity)
+        - name: startDate
+          value: $(tasks.task-add-subscription-user.results.startDate)
+        - name: endDate
+          value: $(tasks.task-add-subscription-user.results.endDate)
+        - name: clusterNamespace
+          value: $(tasks.task-create-workspace.results.clusterNamespace)
+        - name: clusterCluster
+          value: $(tasks.task-create-workspace.results.clusterCluster)
+        - name: externaldomain
+          value: $(tasks.task-get-params.results.externaldomain)
+        - name: lastTask
+          value: "Dashboard,SaaS-Composer,Notification" 
+    - name: task-import-dashboard
+      retries: 4
+      taskRef:
+        name: task-import-dashboard
+      runAfter:
+      - task-somke-test
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: mpUrl
+          value: $(tasks.task-get-params.results.mpUrl)
+        - name: clusterNamespace
+          value: $(tasks.task-create-workspace.results.clusterNamespace)
+        - name: clusterCluster
+          value: $(tasks.task-create-workspace.results.clusterCluster)
+        - name: externaldomain
+          value: $(tasks.task-get-params.results.externaldomain)
+        - name: datacenterCode
+          value: $(params.datacenterCode)
+        - name: lastTask
+          value: "somke-test" 
+    - name: task-send-subscription-mail
+      retries: 4
+      taskRef:
+        name: task-send-subscription-mail
+      runAfter:
+      - task-import-dashboard
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: userId
+          value: $(tasks.task-create-workspace.results.userId)
+        - name: identity
+          value: $(tasks.task-add-subscription-user.results.identity)
+        - name: lastTask
+          value: "import-dashboard"
+    - name: task-check-all-task
+      retries: 4
+      taskRef:
+        name: task-check-all-task
+      runAfter:
+      - task-send-subscription-mail
+      workspaces:
+      - name: storage
+        workspace: shared-data
+      params:
+        - name: gitDirectory
+          value: $(tasks.task-git-clone.results.gitDirectory)
+        - name: mpUrl
+          value: $(tasks.task-get-params.results.mpUrl)
+        - name: ssoUrl
+          value: $(tasks.task-get-params.results.ssoUrl)
+        - name: mpbuyUrl
+          value: $(tasks.task-get-params.results.mpbuyUrl)
+        - name: appbuyUrl
+          value: $(tasks.task-get-params.results.appbuyUrl)
+        - name: serviceUrl
+          value: $(tasks.task-get-params.results.serviceUrl) 
+        - name: serviceConfigs
+          value: $(params.serviceConfigs)   
+        - name: lastTask
+          value: "somke-test"               
+  results:
+    - name: gitDirectory
+      description: gitDirectory
+      value: $(tasks.task-git-clone.results.gitDirectory)
+    - name: ssoUrl
+      description: ssoUrl
+      value: $(tasks.task-get-params.results.ssoUrl)
+    - name: serviceUrl
+      value: $(tasks.task-get-params.results.serviceUrl)
+    - name: mpbuyUrl
+      value: $(tasks.task-get-params.results.mpbuyUrl)
+    - name: externaldomain
+      value: $(tasks.task-get-params.results.externaldomain)
+    - name: subscriptionId
+      value: $(tasks.task-add-subscription-user.results.subscriptionId)
+    - name: userId
+      description: userId
+      value: $(tasks.task-create-workspace.results.userId)
+    - name: memberType
+      description: memberType
+      value: $(tasks.task-add-subscription-user.results.memberType)
+    - name: identity
+      description: identity
+      value: $(tasks.task-add-subscription-user.results.identity)
+    - name: startDate
+      description: startDate
+      value: $(tasks.task-add-subscription-user.results.startDate)
+    - name: endDate
+      description: endDate
+      value: $(tasks.task-add-subscription-user.results.endDate)
+    - name: clusterinfoDefault
+      value: $(tasks.task-create-workspace.results.clusterinfoDefault)
+    - name: clusterCluster
+      value: $(tasks.task-create-workspace.results.clusterCluster)
+    - name: clusterWorkspaceId
+      value: $(tasks.task-create-workspace.results.clusterWorkspaceId)
+    - name: clusterNamespace
+      value: $(tasks.task-create-workspace.results.clusterNamespace)

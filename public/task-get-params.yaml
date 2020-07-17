@@ -1,0 +1,78 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-get-params
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: listingsystemUrl
+      type: string
+      description: listingsystemUrl
+    - name: datacenterCode
+      type: string
+      description: datacenterCode
+  results:
+    - name: ssoUrl
+      description: ssoUrl
+    - name: serviceUrl
+      description: serviceUrl
+    - name: appbuyUrl
+      description: appbuyUrl
+    - name: mpUrl
+      description: mpUrl
+    - name: mpbuyUrl
+      description: mpbuyUrl
+    - name: catalogUrl
+      description: catalogUrl
+    - name: externaldomain
+      description: externaldomain
+  steps:
+    - name: run-get-params
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)"
+      script: |
+        #!/usr/bin/env sh
+        con=true  
+        path="get-params.txt"
+        echo "START" > $path
+        curl $(params.listingsystemUrl)/datacenter?datacenterCode=$(params.datacenterCode) -k > datacenterUrl.json
+        sed -i 's/"api-/"api/g' datacenterUrl.json
+        datacenterUrlFile="datacenterUrl.json"
+        if [ ! -f "$datacenterUrlFile" ]; then
+            echo "datacenterUrlFile is not exist!"
+            echo "FAILURE" > $path
+            con=false
+        fi
+        if [ "$con" = true ] ; then
+            ssoUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apisso.externalUrl"`
+            serviceUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apiservice.externalUrl"`
+            appbuyUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apiappbuy.externalUrl"`
+            mpUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apimp.externalUrl"`
+            mpbuyUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apimpbuy.externalUrl"`
+            catalogUrl=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.apicatalog.externalUrl"`
+            externaldomain=`cat datacenterUrl.json | jq -r ."data[0].datacenterUrl.ensaas.externalUrl"`
+            echo -n $ssoUrl | tee $(results.ssoUrl.path);
+            echo -n $serviceUrl | tee $(results.serviceUrl.path);
+            echo -n $appbuyUrl | tee $(results.appbuyUrl.path);
+            echo -n $mpUrl | tee $(results.mpUrl.path);
+            echo -n $mpbuyUrl | tee $(results.mpbuyUrl.path);
+            echo -n $catalogUrl | tee $(results.catalogUrl.path);
+            echo -n $externaldomain | tee $(results.externaldomain.path);
+            echo "SUCCESS" > get-params.txt
+        else
+            echo -n "" | tee $(results.ssoUrl.path);
+            echo -n "" | tee $(results.serviceUrl.path);
+            echo -n "" | tee $(results.appbuyUrl.path);
+            echo -n "" | tee $(results.mpUrl.path);
+            echo -n "" | tee $(results.mpbuyUrl.path);
+            echo -n "" | tee $(results.catalogUrl.path);
+            echo -n "" | tee $(results.externaldomain.path);
+        fi

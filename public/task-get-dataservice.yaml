@@ -1,0 +1,55 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-get-dataservice
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: lastTask
+      type: string
+  steps:
+    - name: run-get-dataservice
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        #!/usr/bin/env sh
+        path="get-dataService.txt"
+        echo "START" > $path
+        #===============================
+        echo "Check the previous task!!"  
+        con=true       
+        #lastFile="PostgreSQL,MongoDB,RabbitMQ,Redis"
+        lastFile="$(params.lastTask)"
+        n=`echo ${lastFile} | awk -F, '{ total = total + NF }; END { print total }'`
+        echo $n
+        for i in $(seq 1 $n)
+        do
+            dbFile=`echo ${lastFile} | awk -F, -v awkVar="$i" '{sum=i;print $awkVar}'`
+            dbFileName="${dbFile}.txt"
+            if test ! -f "$dbFileName"
+            then
+                echo "$dbFileName does not exist"
+                echo "FAILURE" > $path
+                con=false
+                break
+            else
+                res=$(cat "$dbFileName")
+                if [ "$res" != "SUCCESS" ];then
+                    echo "${dbFileName}, res is ${res}"
+                    echo "FAILURE" > $path
+                    con=false
+                    break
+                fi
+            fi 
+        done
+        if [ "$con" = true ] ; then
+            echo "SUCCESS" > $path
+        fi

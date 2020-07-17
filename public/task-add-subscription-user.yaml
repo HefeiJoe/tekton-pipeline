@@ -1,0 +1,96 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-add-subscription-user
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: serviceConfigs
+      type: string
+      description: serviceConfigs
+    - name: datacenterCode
+      type: string
+      description: datacenterCode
+    - name: lastTask
+      type: string
+  results:
+    - name: memberType
+      description: memberType
+    - name: identity
+      description: identity
+    - name: startDate
+      description: startDate
+    - name: endDate
+      description: endDate
+    - name: subscriptionId
+      description: subscriptionId
+  steps:
+    - name: run-add-subscription-user
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        #!/usr/bin/env sh
+        path="add-subscription-user.txt"
+        echo "START" > add-subscription-user.txt  
+        #===============================        
+        echo "Check the previous task!!"    
+        con=true      
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "${lastFilepath}"
+        then
+            echo "$lastFilepath does not exist"
+            echo "FAILURE" > $path
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ];then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                con=false
+            fi
+            echo "${res}"
+        fi  
+        #===============================    
+        if [ "$con" = true ] ; then        
+            python3 identifyuser.py "$(params.ssoUrl)" "$(params.serviceConfigs)" "$(params.datacenterCode)"
+            ssoinfoFile="ssoinfo.txt"
+            if test ! -f "$ssoinfoFile" ; then
+                echo "ssoinfoFile is not exist!"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi
+        if [ "$con" = true ] ; then  
+            memberType=`awk -F: '{print $1}' ssoinfo.txt`
+            identity=`awk -F: '{print $2}' ssoinfo.txt`
+            start_date=""
+            end_date=""
+            if [ "$identity" == "trial" ];then
+                start_date=`awk -F: '{print $3}' ssoinfo.txt`
+                end_date=`awk -F: '{print $4}' ssoinfo.txt`
+            fi
+            subscriptionId=`awk -F: '{print $5}' ssoinfo.txt`
+            echo -n $memberType | tee $(results.memberType.path);
+            echo -n $identity | tee $(results.identity.path);
+            echo -n $start_date | tee $(results.startDate.path);
+            echo -n $end_date | tee $(results.endDate.path);
+            echo -n $subscriptionId | tee $(results.subscriptionId.path);
+            echo "SUCCESS" > add-subscription-user.txt
+        else
+            echo -n "" | tee $(results.memberType.path);
+            echo -n "" | tee $(results.identity.path);
+            echo -n "" | tee $(results.startDate.path);
+            echo -n "" | tee $(results.endDate.path);
+            echo -n "" | tee $(results.subscriptionId.path);
+        fi

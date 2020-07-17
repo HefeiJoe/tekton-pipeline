@@ -1,0 +1,62 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-get-serviceinfo
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: ssoUrl
+      type: string
+    - name: catalogUrl
+      type: string 
+    - name: servicePackageId
+      type: string 
+    - name: subscriptionId
+      type: string 
+    - name: lastTask
+      type: string   
+  steps:
+    - name: run-get-serviceinfo
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |         
+        path="get-serviceinfo.txt"
+        echo "START" > $path
+        #===============================
+        echo "Check the previous task!!"
+        con=true        
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFilepath does not exist"
+            echo "FAILURE" > $path
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ]; then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi 
+        #===============================
+        echo $con
+        if test "$con" = true ; then  
+            python3 getserviceinfo.py "$(params.ssoUrl)" "$(params.catalogUrl)" "$(params.servicePackageId)" "$(params.subscriptionId)"
+            serviceInfoFile="serviceInfo.json"
+            if test ! -f "$serviceInfoFile" ; then 
+                echo "$serviceInfoFile is not exist!"
+                echo "FAILURE" > $path
+                con=false
+            else
+                echo "SUCCESS" > $path
+            fi
+        fi 

@@ -1,0 +1,92 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-create-workspace
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: mpUrl
+      type: string
+    - name: ssoUrl
+      type: string
+    - name: mpbuyUrl
+      type: string 
+    - name: serviceConfigs
+      type: string 
+    - name: lastTask
+      type: string   
+  results:
+    - name: clusterinfoDefault
+      description: clusterinfoDefault
+    - name: clusterCluster
+      description: clusterCluster
+    - name: clusterWorkspaceId
+      description: clusterWorkspaceId
+    - name: clusterNamespace
+      description: clusterNamespace
+    - name: userId
+      description: userId
+  steps:
+    - name: run-create-workspace
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |    
+        ls -l /bin/*sh      
+        path="create-workspace.txt"
+        echo "START" > $path
+        #===============================
+        echo "Check the previous task!!"
+        con=true        
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFilepath does not exist"
+            echo "FAILURE" > $path
+            con=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ]; then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi 
+        #===============================
+        echo $con
+        if test "$con" = true ; then  
+            python3 createworkspace.py "$(params.mpUrl)" "$(params.ssoUrl)" "$(params.mpbuyUrl)" "$(params.serviceConfigs)"
+            returnStrFile="return_str.txt"
+            if test ! -f "$returnStrFile" ; then 
+                echo "$returnStrFile is not exist!"
+                echo "FAILURE" > $path
+                con=false
+            fi
+        fi 
+        if [ "$con" = true ] ; then 
+            clusterinfoDefault=`awk '{print $1}' return_str.txt`
+            clusterCluster=`echo ${clusterinfoDefault} | awk -F: '{print $2}'`
+            clusterWorkspaceId=`echo ${clusterinfoDefault} | awk -F: '{print $3}'`
+            clusterNamespace=`echo ${clusterinfoDefault} | awk -F: '{print $5}'`  
+            userId=`cat serviceInfo.json | jq -r ."userId"`            
+            echo -n $clusterinfoDefault | tee $(results.clusterinfoDefault.path);
+            echo -n $clusterCluster | tee $(results.clusterCluster.path);
+            echo -n $clusterWorkspaceId | tee $(results.clusterWorkspaceId.path);
+            echo -n $clusterNamespace | tee $(results.clusterNamespace.path);
+            #echo -n $deviceonNamespace | tee $(results.deviceonNamespace.path);
+            echo -n $userId | tee $(results.userId.path);
+            echo "SUCCESS" > $path
+        else
+            echo -n "" | tee $(results.clusterinfoDefault.path);
+            echo -n "" | tee $(results.clusterCluster.path);
+            echo -n "" | tee $(results.clusterWorkspaceId.path);
+            echo -n "" | tee $(results.clusterNamespace.path);
+            echo -n "" | tee $(results.userId.path);
+        fi

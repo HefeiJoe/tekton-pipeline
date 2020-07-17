@@ -1,0 +1,92 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-create-app
+spec:
+  workspaces:
+  - name: storage
+  params:
+    - name: gitDirectory
+      type: string
+    - name: clusterinfoDefault
+      type: string  
+    - name: ssoUrl
+      type: string
+    - name: appbuyUrl
+      type: string 
+    - name: serviceConfigs
+      type: string
+    - name: serviceName
+      type: string
+    - name: lastTask
+      type: string
+  steps:
+    - name: run-create-app
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        path=$(params.serviceName).txt
+        echo "START" > $path
+        service=$(cat svs.txt)
+        if [ ! -z "${service##*$(params.serviceName)*}" ]
+        then
+            echo "There is no need to deploy $(params.serviceName)"
+            echo "SUCCESS" > $path
+        else
+            echo "Check the previous task!!" 
+            con=true        
+            lastFilepath="$(params.lastTask).txt"
+            if test ! -f "$lastFilepath"
+            then
+                echo "$lastFilepath does not exist"
+                echo "FAILURE" > $path
+                con=false
+            else
+                res=$(cat ${lastFilepath})
+                if [ "$res" != "SUCCESS" ]; then
+                    echo "res is ${res}"
+                    echo "FAILURE" > $path
+                    con=false
+                fi
+            fi 
+            if [ "$con" = true ] ; then
+                if [ -d "$(params.serviceName)" ]; then                    
+                    rm -rf $(params.serviceName)
+                fi
+                mkdir $(params.serviceName)
+                cd $(params.serviceName)
+                clusterInfo=""
+                if [ "$(params.serviceName)" = "Deviceon" ] ; then
+                    clusterInfo=`awk '{print $2}' return_str.txt`
+                else
+                    clusterInfo=$(params.clusterinfoDefault)
+                fi
+                if [ -f "result.txt" ]; then 
+                    rm result.txt
+                fi
+                python3 ../createapp.py "${clusterInfo}" "$(params.ssoUrl)" "$(params.appbuyUrl)" "../serviceInfo.json" "$(params.serviceName)" "../postgreServiceInfo.json"                   
+                if [ -f "result.txt" ]; then 
+                    echo "result.txt is exist!"
+                    echo "FAILURE" > ../$path
+                    con=false
+                fi
+            fi
+            if [ "$con" = true ] ; then
+                urlprefixFile="urlprefix.json"
+                if [ ! -f "${urlprefixFile}" ]; then 
+                    echo "urlprefixFile is not exist!"
+                    echo "FAILURE" > ../$path
+                    con=false
+                fi
+            fi
+            if [ "$con" = true ] ; then
+                urlprefix="$(cat urlprefix.json)###"
+                echo ${urlprefix} >> urlprefix.txt
+                echo "SUCCESS" > ../$path
+            fi            
+        fi        

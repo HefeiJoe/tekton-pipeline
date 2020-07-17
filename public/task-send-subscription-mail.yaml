@@ -1,0 +1,85 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-send-subscription-mail
+spec:
+  params:
+    - name: gitDirectory
+      type: string
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: userId
+      type: string
+      description: userId
+    - name: identity
+      type: string
+    - name: lastTask
+      type: string
+  workspaces:
+  - name: storage
+  steps:
+    - name: run-send-mail
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        path="send-mail.txt"
+        #===============================
+        echo "Check the previous task!!"
+        result=true        
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFilepath does not exist"
+            echo "FAILURE" > $path
+            result=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ]; then
+                echo "res is ${res}"
+                echo "FAILURE" > $path
+                result=false
+            fi
+        fi 
+        #===============================
+        echo "START" > path
+        failedStrFile="failed_str.txt"
+        if test -f "${failedStrFile}"
+        then
+            failedStr=$(cat ${failedStrFile})
+            echo $failedStr
+            if [ ! -z "$failedStr" ]; then 
+                echo "failed_str is not null"
+                result=false
+            fi
+        fi
+        if test ! -f "success_str.txt"
+        then
+            echo "success_str.txt is not exist"
+            result=false
+        fi
+        curl $(params.ssoUrl)/users/username/$(params.userId) -k > username.json
+        userEmail=`cat username.json | jq -r '.username'`
+        if [ $result = true ] ; then
+            success_str=$(cat success_str.txt)
+            if [ "${userEmail}"="ssopassroot@email.com" ];then
+                #targetEmail="WISE-PaaS.SRE@advantech.com"
+                userEmail="sun.di@advantech.com.cn"
+            fi
+            if [ "$(params.identity)" = "trial" ];then
+                python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" "${userEmail}" "Delivery success" "trialdeliverynotice.html" "${success_str}" "0"
+            else
+                python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" "${userEmail}" "Delivery success" "officialdeliverynotice.html" "${success_str}" "0"
+            fi
+        else
+            #targetEmail="WISE-PaaS.SRE@advantech.com"
+            userEmail="he.fei@advantech.com.cn"
+            sendmessage="<p>User:${userEmail},service deployment failed</p><br><p>Feel free to contact us if you have any questions. Thank you!</p><br><p>WISE-PaaS/EnSaaS Team</p>"
+            python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" "${userEmail}" "Delivery failed" "0" "0" "${sendmessage}"
+        fi
+        echo "SUCCESS" > $path    

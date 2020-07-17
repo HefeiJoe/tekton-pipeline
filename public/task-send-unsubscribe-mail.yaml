@@ -1,0 +1,61 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-send-unsubscribe-mail
+spec:
+  params:
+    - name: gitDirectory
+      type: string
+    - name: ssoUrl
+      type: string
+      description: ssoUrl
+    - name: subscriptionId
+      type: string
+    - name: lastTask
+      type: string
+  workspaces:
+  - name: storage
+  steps:
+    - name: run-send-unsubscribe-mail
+      image: harbor.hz.wise-paas.com.cn/app-production/pipeline-task/alpine:1.0.0.9
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      workingDir: "$(workspaces.storage.path)/$(params.gitDirectory)/"
+      script: |
+        path="$(workspaces.storage.path)/send-mail.txt"
+        echo "START" > path
+        #===============================
+        echo "Check the previous task!!"
+        result=true        
+        lastFilepath="$(params.lastTask).txt"
+        if test ! -f "$lastFilepath"
+        then
+            echo "$lastFilepath does not exist"
+            #echo "FAILURE" > $path
+            result=false
+        else
+            res=$(cat ${lastFilepath})
+            if [ "$res" != "SUCCESS" ]; then
+                echo "res is ${res}"
+                #echo "FAILURE" > $path
+                result=false
+            fi
+        fi 
+        #===============================          
+        if [ $result = true ] ; then    
+            userid=`cat serviceInfo.json | jq -r ."[0].userId"`           
+            curl $(params.ssoUrl)/users/username/${userId} -k > username.json
+            userEmail=`cat username.json | jq -r '.username'`        
+            sendmessage="Hello Users,\n\nThe following service has been successfully unsubscribed.subscriptionId:$(params.subscriptionId).\n\nFeel free to contact us if you have any questions. Thank you!\n\nWISE-PaaS/EnSaaS Team"					
+            python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" "${userEmail}" "Unsubscribe success" "0" "0" "${sendmessage}"
+            echo "SUCCESS"
+        else
+            #userEmail="WISE-PaaS.SRE@advantech.com"
+            userEmail="sun.di@advantech.com.cn"
+            sendmessage="User${userEmail},service unsubscribe failed.subscriptionId:$(params.subscriptionId).\n\nFeel free to contact us if you have any questions. Thank you!\n\nWISE-PaaS/EnSaaS Team"  
+            python3 sendemail.py "lu.jin@advantech.com.cn" "7ea31340@Ss0" "http://portal-notification-ensaas.sa.wise-paas.com" "https://api-sso-ensaas.sa.wise-paas.com/v4.0" "${userEmail}" "Delivery failed" "0" "0" "${sendmessage}"
+            echo "FAILURE"
+        fi

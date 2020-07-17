@@ -1,0 +1,98 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-git-clone
+spec:
+  workspaces:
+    - name: storage
+      description: The git repo will be cloned onto the volume backing this workspace
+  params:
+    - name: url
+      description: git url to clone
+      type: string
+    - name: revision
+      description: git revision to checkout (branch, tag, sha, ref…)
+      type: string
+      default: master
+    - name: refspec
+      description: (optional) git refspec to fetch before checking out revision
+      default: ""
+    - name: submodules
+      description: defines if the resource should initialize and fetch the submodules
+      type: string
+      default: "true"
+    - name: depth
+      description: performs a shallow clone where only the most recent commit(s) will be fetched
+      type: string
+      default: "1"
+    - name: sslVerify
+      description: defines if http.sslVerify should be set to true or false in the global git config
+      type: string
+      default: "true"
+    - name: subdirectory
+      description: subdirectory inside the "output" workspace to clone the git repo into
+      type: string
+      default: ""
+    - name: deleteExisting
+      description: clean out the contents of the repo's destination directory (if it already exists) before trying to clone the repo there
+      type: string
+      default: "false"
+  results:
+    - name: commit
+      description: The precise commit SHA that was fetched by this Task
+    - name: gitDirectory
+      description: gitdirectory
+  steps:
+    - name: clone
+      image: harbor.wise-paas.com/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.12.0
+      resources:
+        limits:
+          cpu: "50m"
+          memory: "128Mi"
+          ephemeral-storage: "128Mi"
+      script: |
+        #!/usr/bin/env sh
+        gitdir=`date +%s%3N``echo $RANDOM`
+        CHECKOUT_DIR="$(workspaces.storage.path)/${gitdir}/$(params.subdirectory)"
+        cleandir() {
+          # Delete any existing contents of the repo directory if it exists.
+          #
+          # We don't just "rm -rf $CHECKOUT_DIR" because $CHECKOUT_DIR might be "/"
+          # or the root of a mounted volume.
+          if [[ -d "$CHECKOUT_DIR" ]] ; then
+            # Delete non-hidden files and directories
+            rm -rf "$CHECKOUT_DIR"/*
+            # Delete files and directories starting with . but excluding ..
+            rm -rf "$CHECKOUT_DIR"/.[!.]*
+            # Delete files and directories starting with .. plus any other character
+            rm -rf "$CHECKOUT_DIR"/..?*
+          fi
+        }
+        if [[ "$(params.deleteExisting)" == "true" ]] ; then
+          cleandir
+        fi
+        /ko-app/git-init \
+          -url "$(params.url)" \
+          -revision "$(params.revision)" \
+          -refspec "$(params.refspec)" \
+          -path "$CHECKOUT_DIR" \
+          -sslVerify="$(params.sslVerify)" \
+          -submodules="$(params.submodules)" \
+          -depth "$(params.depth)"
+        cd "$CHECKOUT_DIR"
+        RESULT_SHA="$(git rev-parse HEAD | tr -d '\n')"
+        EXIT_CODE="$?"
+        if [ "$EXIT_CODE" != 0 ]
+        then
+          exit $EXIT_CODE
+        fi
+        count=`ls -l | grep "^-" | wc -l`
+        if [ ${count} -eq 0 ];then
+            echo "git clone failed"
+            exit 1
+        fi
+        chmod +x ./*
+        ls -l
+        # Make sure we don't add a trailing newline to the result!
+        echo -n "$gitdir" > $(results.gitDirectory.path) 
+        echo -n "$RESULT_SHA" > $(results.commit.path) 

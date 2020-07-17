@@ -1,0 +1,28 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: pipelinerun-oee
+spec:
+  serviceAccountName: gitlab-propublic
+  pipelineRef:
+    name: pipeline-oee
+  workspaces:
+  - name: shared-data
+    volumeClaimTemplate:
+      metadata:
+        name: shared
+      spec:
+        accessModes:
+            - ReadWriteOnce
+        storageClassName: default
+        volumeMode: Filesystem
+        resources:
+          requests:
+            storage: 20Gi
+  params: 
+    - name: serviceConfigs
+      value: ""
+    - name: listingsystemUrl
+      value: ""
+    - name: datacenterCode
+      value: ""
